@@ -2,28 +2,28 @@ import { createRouter, createWebHistory } from "vue-router";
 import { auth } from "@/firebase";
 
 import LoginView from "@/views/LoginView.vue";
+import RegisterView from "@/views/RegisterView.vue";
 import HomeView from "@/views/HomeView.vue";
 import QuestionsView from "@/views/QuestionsView.vue";
 import HistoryView from "@/views/HistoryView.vue";
+import ReportView from "@/views/ReportView.vue";
 import ProfileView from "@/views/ProfileView.vue";
 
-// Rotas protegidas – só entra se estiver logado
 const requireAuth = (to, from, next) => {
   const user = auth.currentUser;
-  if (!user) next("/login");
-  else next();
+  if (!user && to.path !== "/login" && to.path !== "/register") {
+    next("/login");
+  } else {
+    next();
+  }
 };
 
 const routes = [
-  {
-    path: "/",
-    redirect: "/home",
-  },
-  {
-    path: "/login",
-    name: "login",
-    component: LoginView,
-  },
+  { path: "/", redirect: "/home" },
+
+  { path: "/login", name: "login", component: LoginView },
+  { path: "/register", name: "register", component: RegisterView },
+
   {
     path: "/home",
     name: "home",
@@ -40,6 +40,12 @@ const routes = [
     path: "/history",
     name: "history",
     component: HistoryView,
+    beforeEnter: requireAuth,
+  },
+  {
+    path: "/report",
+    name: "report",
+    component: ReportView,
     beforeEnter: requireAuth,
   },
   {

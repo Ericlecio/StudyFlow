@@ -36,14 +36,23 @@ APENAS retorne JSON válido. Não explique nada.
     `;
 
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini", // 🔥 Rápido e barato, perfeito para isso
+      model: "gpt-4o-mini",
       messages: [{ role: "user", content: prompt }],
       temperature: 0.3,
     });
 
     const text = completion.choices[0].message.content.trim();
 
-    const questions = JSON.parse(text);
+    let questions;
+    try {
+      questions = JSON.parse(text);
+    } catch (e) {
+      console.error("Erro ao parsear JSON:", text);
+      throw new functions.https.HttpsError(
+        "internal",
+        "Resposta inválida da OpenAI."
+      );
+    }
 
     return { questions };
   } catch (error) {

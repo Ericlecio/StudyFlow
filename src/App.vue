@@ -1,13 +1,16 @@
 <template>
   <div id="app">
-    <Navbar />
-
-    <main style="padding: 20px;">
-      <router-view />
-    </main>
+    <Navbar v-if="showNavbar" />
+    <router-view />
   </div>
 </template>
 
 <script setup>
+import { computed } from "vue";
+import { useRoute } from "vue-router";
 import Navbar from "@/components/Navbar.vue";
+
+const route = useRoute();
+
+const showNavbar = computed(() => route.path !== "/login" && route.path !== "/register");
 </script>
