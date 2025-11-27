@@ -282,6 +282,7 @@ async function handleLoadMore() {
   display: flex;
   flex-direction: column;
   gap: 20px;
+  color: #2a2d6a;
 }
 
 /* Load More Section */
