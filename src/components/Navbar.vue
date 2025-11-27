@@ -10,26 +10,13 @@
           to="/home"
           class="nav-item"
           :class="{ active: isActive('/home') }"
-          >Home</router-link
-        >
+        >Home</router-link>
+
         <router-link
           to="/questions"
           class="nav-item"
           :class="{ active: isActive('/questions') }"
-          >Questões</router-link
-        >
-        <router-link
-          to="/history"
-          class="nav-item"
-          :class="{ active: isActive('/history') }"
-          >Histórico</router-link
-        >
-        <router-link
-          to="/report"
-          class="nav-item"
-          :class="{ active: isActive('/report') }"
-          >Relatório</router-link
-        >
+        >Questões</router-link>
       </div>
     </div>
 
@@ -65,7 +52,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from "vue";
+import { ref, computed } from "vue";
 import { auth } from "@/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { logout as logoutService } from "@/services/authService";
@@ -80,14 +67,14 @@ onAuthStateChanged(auth, (u) => (user.value = u));
 
 // Lógica para pegar o nome ou parte do email
 const displayName = computed(() => {
-  if (user.value?.displayName) return user.value.displayName.split(" ")[0]; // Só o primeiro nome
-  if (user.value?.email) return user.value.email.split("@")[0]; // Parte antes do @
+  if (user.value?.displayName) return user.value.displayName.split(" ")[0];
+  if (user.value?.email) return user.value.email.split("@")[0];
   return "Estudante";
 });
 
 // Lógica para pegar a inicial
 const userInitial = computed(() => {
-  return displayName.value.charAt(0).toUpperCase();
+  return displayName.value ? displayName.value.charAt(0).toUpperCase() : "U";
 });
 
 function isActive(path) {
@@ -108,7 +95,7 @@ async function logoutUser() {
   router.push("/login");
 }
 
-// Pequena diretiva para fechar ao clicar fora (simples)
+// Diretiva click-outside
 const vClickOutside = {
   mounted(el, binding) {
     el.clickOutsideEvent = function (event) {
@@ -326,11 +313,10 @@ const vClickOutside = {
 /* Responsividade Mobile */
 @media (max-width: 768px) {
   .nav-links {
-    display: none; /* Em mobile, idealmente usaria um menu hamburguer */
+    display: none;
   }
-
   .user-name {
-    display: none; /* Esconde nome, deixa só avatar */
+    display: none;
   }
 }
 </style>
