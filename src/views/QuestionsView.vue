@@ -1,67 +1,75 @@
 <template>
-  <div class="page">
-    <h1>Gerar Questões</h1>
+  <div class="page-dark">
+    <div class="container">
+      <header class="header">
+        <h1>Banco de Questões</h1>
+        <p class="subtitle">Estude com IA focada em concursos e exames</p>
+      </header>
 
-    <div class="form">
-      <input
-        v-model="topic"
-        placeholder="Digite um tema (ex: Fotossíntese)"
-      />
-      <button @click="handleGenerate" :disabled="loading">
-        {{ loading ? "Gerando..." : "Gerar Questões" }}
-      </button>
-    </div>
-
-    <div v-if="questions.length > 0" class="questions-container">
-      <h2>Questões</h2>
-
-      <QuestionCard
-        v-for="(q, index) in questions"
-        :key="'q-' + index"
-        :question="q"
-        :index="index"
-        v-model="answers[index]"
-      />
-
-      <button class="finish-btn" @click="finalizarQuiz">
-        Finalizar Quiz
-      </button>
-
-      <div v-if="finished" class="summary-box">
-        <p>
-          Você acertou
-          <strong>{{ totalAcertos }}</strong>
-          de
-          <strong>{{ totalQuestoes }}</strong>
-          questões ({{ percentualAcertos }}%).
-        </p>
-        <p class="relatorio-texto">
-          {{ mensagemRelatorio }}
-        </p>
-
-        <div v-if="podeGerarReforco" class="reforco-box">
-          <p>
-            Detectamos erros nesse tema. Que tal praticar mais com questões de
-            reforço focadas nele?
-          </p>
-          <button @click="gerarReforco" :disabled="loadingReforco">
-            {{ loadingReforco ? "Gerando reforço..." : "Gerar questões de reforço" }}
+      <!-- Formulário de Busca -->
+      <div class="search-box">
+        <div class="input-group">
+          <input
+            v-model="topic"
+            class="topic-input"
+            placeholder="Digite o assunto (ex: Direito Administrativo, Python, Enem...)"
+            @keyup.enter="handleGenerate"
+            :disabled="loading"
+          />
+          <button
+            @click="handleGenerate"
+            :disabled="loading"
+            class="search-btn"
+          >
+            <span v-if="!loading">Buscar</span>
+            <span v-else>Buscando...</span>
           </button>
         </div>
       </div>
-    </div>
 
-    <!-- Questões de reforço -->
-    <div v-if="reforcoQuestions.length > 0" class="reforco-container">
-      <h2>Questões de Reforço – {{ topic }}</h2>
+      <!-- Loading Inicial -->
+      <div v-if="loading && questions.length === 0" class="loading-state">
+        <div class="spinner"></div>
+        <p>Pesquisando e gerando questões...</p>
+      </div>
 
-      <QuestionCard
-        v-for="(q, index) in reforcoQuestions"
-        :key="'r-' + index"
-        :question="q"
-        :index="index"
-        v-model="reforcoAnswers[index]"
-      />
+      <!-- Lista de Questões -->
+      <div v-if="questions.length > 0" class="quiz-area">
+        <div class="quiz-header">
+          <h2>
+            Resultados para: <span>{{ currentTopic }}</span>
+          </h2>
+          <span class="badge">{{ questions.length }} questões encontradas</span>
+        </div>
+
+        <div class="cards-list">
+          <QuestionCard
+            v-for="(q, index) in questions"
+            :key="index"
+            :question="q"
+            :index="index"
+            v-model="answers[index]"
+          />
+        </div>
+
+        <!-- Botão Carregar Mais -->
+        <div class="load-more-container">
+          <p v-if="hasErrors" class="adaptive-hint">
+            💡 A IA detectou alguns erros. As próximas questões focarão nas suas
+            dificuldades.
+          </p>
+          <button
+            @click="handleLoadMore"
+            :disabled="loadingMore"
+            class="load-more-btn"
+          >
+            <span v-if="!loadingMore"
+              >Carregar mais questões sobre "{{ currentTopic }}"</span
+            >
+            <span v-else>Gerando reforço personalizado...</span>
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -70,195 +78,290 @@
 import { ref, computed } from "vue";
 import { generateQuestions } from "@/services/questionService";
 import QuestionCard from "@/components/QuestionCard.vue";
-import { auth } from "@/firebase";
-import { saveResult } from "@/services/firestoreService";
 
 const topic = ref("");
+const currentTopic = ref("");
 const loading = ref(false);
+const loadingMore = ref(false);
 const questions = ref([]);
 const answers = ref([]);
-const finished = ref(false);
 
-const mensagemRelatorio = ref("");
+// Quantidade fixa de questões por vez
+const BATCH_SIZE = 5;
 
-const podeGerarReforco = ref(false);
-const loadingReforco = ref(false);
-const reforcoQuestions = ref([]);
-const reforcoAnswers = ref([]);
-
-const totalAcertos = computed(() =>
-  questions.value.reduce((sum, q, i) => {
-    return sum + (answers.value[i] === q.answer ? 1 : 0);
-  }, 0)
-);
-
-const totalQuestoes = computed(() => questions.value.length);
-
-const percentualAcertos = computed(() => {
-  if (!totalQuestoes.value) return 0;
-  return Math.round((totalAcertos.value / totalQuestoes.value) * 100);
+// Computado para verificar se há erros visíveis para dar feedback visual
+const hasErrors = computed(() => {
+  return questions.value.some((q, index) => {
+    const ans = answers.value[index];
+    return ans && ans !== q.answer;
+  });
 });
 
 async function handleGenerate() {
   if (!topic.value.trim()) return;
 
   loading.value = true;
+  // Reseta a lista para uma nova busca
   questions.value = [];
   answers.value = [];
-  finished.value = false;
-  mensagemRelatorio.value = "";
-  podeGerarReforco.value = false;
-  reforcoQuestions.value = [];
-  reforcoAnswers.value = [];
+  currentTopic.value = topic.value;
 
   try {
-    const result = await generateQuestions(topic.value);
+    // Gera o primeiro lote (padrão)
+    const result = await generateQuestions(topic.value, BATCH_SIZE);
     questions.value = result;
     answers.value = Array(result.length).fill(null);
   } catch (err) {
     console.error("Erro:", err);
-    alert("Erro ao gerar questões");
+    alert(err.message || "Erro ao buscar questões.");
   } finally {
     loading.value = false;
   }
 }
 
-async function finalizarQuiz() {
-  if (!questions.value.length) return;
-
-  finished.value = true;
-
-  const acertos = totalAcertos.value;
-  const total = totalQuestoes.value;
-  const perc = percentualAcertos.value;
-
-  if (total === 0) {
-    mensagemRelatorio.value = "Nenhuma questão respondida.";
-  } else if (perc >= 80) {
-    mensagemRelatorio.value =
-      "Excelente! Seu desempenho nesse tema está muito bom. Continue revisando periodicamente.";
-  } else if (perc >= 50) {
-    mensagemRelatorio.value =
-      "Bom desempenho, mas ainda há espaço para melhorar. Vale reforçar os pontos em que você errou.";
-  } else {
-    mensagemRelatorio.value =
-      "Você teve bastante dificuldade nesse tema. Recomendamos focar bem nessa matéria com novas questões.";
-  }
-
-  podeGerarReforco.value = acertos < total;
-
-  const user = auth.currentUser;
-  if (!user) return;
-
+async function handleLoadMore() {
+  loadingMore.value = true;
   try {
-    await saveResult({
-      userId: user.uid,
-      tema: topic.value,
-      acertos,
-      erros: total - acertos,
-      data: new Date().toISOString(),
+    // 1. Identificar erros cometidos até agora
+    const recentErrors = questions.value.filter((q, index) => {
+      const ans = answers.value[index];
+      // Considera erro apenas se já respondeu e a resposta for diferente do gabarito
+      return ans && ans !== q.answer;
     });
-  } catch (e) {
-    console.error("Erro ao salvar resultado:", e);
-  }
-}
 
-async function gerarReforco() {
-  if (!topic.value.trim()) return;
+    let searchTopic = currentTopic.value;
 
-  loadingReforco.value = true;
-  reforcoQuestions.value = [];
-  reforcoAnswers.value = [];
+    // 2. Se houver erros, refinar o prompt para a IA
+    if (recentErrors.length > 0) {
+      // Pega o texto das últimas 3 questões erradas para dar contexto
+      const errorContext = recentErrors
+        .slice(-3)
+        .map((q) => q.question)
+        .join(". ");
 
-  try {
-    const reforcoTema = `${topic.value} (reforço focado em pontos que alunos costumam errar)`;
-    const result = await generateQuestions(reforcoTema);
-    reforcoQuestions.value = result;
-    reforcoAnswers.value = Array(result.length).fill(null);
-  } catch (e) {
-    console.error("Erro ao gerar reforço:", e);
-    alert("Erro ao gerar questões de reforço");
+      // Adiciona instrução de reforço ao tema
+      searchTopic += `. O aluno errou anteriormente questões sobre: "${errorContext}". Gere novas questões focadas em reforçar os conceitos corretos para essas dúvidas, mas mantendo o tema principal.`;
+    }
+
+    // 3. Gerar novo lote (adaptativo)
+    const result = await generateQuestions(searchTopic, BATCH_SIZE);
+
+    // Adiciona à lista existente
+    questions.value.push(...result);
+
+    // Adiciona slots de resposta vazios
+    const newAnswers = Array(result.length).fill(null);
+    answers.value.push(...newAnswers);
+  } catch (err) {
+    console.error("Erro:", err);
+    alert("Não foi possível carregar mais questões.");
   } finally {
-    loadingReforco.value = false;
+    loadingMore.value = false;
   }
 }
 </script>
 
 <style scoped>
-.page {
-  padding: 24px;
+.page-dark {
+  background-color: #050507;
+  min-height: 100vh;
+  color: white;
+  padding: 40px 20px;
+  font-family: "Inter", sans-serif;
 }
 
-.form {
-  margin-bottom: 20px;
+.container {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.header {
+  text-align: center;
+  margin-bottom: 40px;
+}
+
+.header h1 {
+  font-size: 2.5rem;
+  font-weight: 800;
+  background: linear-gradient(135deg, #4e73df 0%, #7096ff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 10px;
+}
+
+.subtitle {
+  color: #a0a3b5;
+  font-size: 1.1rem;
+}
+
+/* Search Box */
+.search-box {
+  background: #171a4a;
+  padding: 20px;
+  border-radius: 16px;
+  border: 1px solid #2a2d6a;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  margin-bottom: 40px;
+}
+
+.input-group {
   display: flex;
-  gap: 10px;
+  gap: 12px;
 }
 
-.form input {
+.topic-input {
   flex: 1;
-}
-
-.form button {
-  background: var(--primary);
+  background: #0a0a0c;
+  border: 1px solid #2a2d6a;
+  padding: 16px 20px;
+  border-radius: 12px;
   color: white;
-  padding: 10px 16px;
+  font-size: 1.1rem;
+  transition: border-color 0.2s;
 }
 
-.form button:hover {
-  background: var(--primary-dark);
+.topic-input:focus {
+  outline: none;
+  border-color: #4e73df;
 }
 
-.questions-container {
-  margin-top: 20px;
-}
-
-.finish-btn {
-  margin-top: 10px;
-  padding: 8px 16px;
-  background: var(--primary);
+.search-btn {
+  background: #4e73df;
   color: white;
+  border: none;
+  padding: 0 30px;
+  border-radius: 12px;
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
 }
 
-.finish-btn:hover {
-  background: var(--primary-dark);
+.search-btn:hover:not(:disabled) {
+  background: #3b63d6;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 15px rgba(78, 115, 223, 0.3);
 }
 
-.summary-box {
-  margin-top: 12px;
-  padding: 10px;
-  background: #ede9ff;
-  border-radius: 6px;
+.search-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
-.relatorio-texto {
-  margin-top: 6px;
-  color: var(--text-muted);
+/* Quiz Area */
+.quiz-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 25px;
+  padding-bottom: 15px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-.reforco-box {
-  margin-top: 10px;
-  padding: 10px;
-  background: #fdf2ff;
-  border-radius: 6px;
+.quiz-header h2 {
+  font-size: 1.2rem;
+  color: #a0a3b5;
 }
 
-.reforco-box button {
-  margin-top: 8px;
-  padding: 6px 12px;
-  background: var(--accent);
-  color: #1E1B4B;
+.quiz-header h2 span {
+  color: white;
+  font-weight: 700;
 }
 
-.reforco-box button:hover {
-  filter: brightness(0.95);
+.badge {
+  background: #2a2d6a;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  color: #7096ff;
+  border: 1px solid rgba(78, 115, 223, 0.3);
 }
 
-.reforco-container {
-  margin-top: 24px;
-  padding: 16px;
-  background: white;
-  border-radius: 10px;
-  box-shadow: 0 3px 10px rgba(0,0,0,0.08);
+.cards-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* Load More Section */
+.load-more-container {
+  margin-top: 40px;
+  text-align: center;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.adaptive-hint {
+  color: #f59e0b;
+  font-size: 0.9rem;
+  margin-bottom: 12px;
+  animation: fadeIn 0.5s;
+}
+
+.load-more-btn {
+  background: transparent;
+  color: #7096ff;
+  border: 2px solid #2a2d6a;
+  padding: 14px 28px;
+  border-radius: 30px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.load-more-btn:hover:not(:disabled) {
+  background: #2a2d6a;
+  color: white;
+  transform: translateY(-2px);
+}
+
+.load-more-btn:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+/* Loading */
+.loading-state {
+  text-align: center;
+  padding: 60px;
+  color: #a0a3b5;
+}
+.spinner {
+  width: 50px;
+  height: 50px;
+  border: 4px solid #2a2d6a;
+  border-top-color: #4e73df;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 20px;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Responsividade */
+@media (max-width: 600px) {
+  .input-group {
+    flex-direction: column;
+  }
+  .search-btn {
+    width: 100%;
+    padding: 16px;
+  }
+  .header h1 {
+    font-size: 2rem;
+  }
 }
 </style>

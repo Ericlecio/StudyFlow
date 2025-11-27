@@ -1,20 +1,55 @@
 import { db } from "@/firebase";
-import { collection, addDoc, query, where, getDocs } from "firebase/firestore";
+import {
+  collection,
+  addDoc,
+  query,
+  orderBy,
+  getDocs,
+} from "firebase/firestore";
 
-const resultadosRef = collection(db, "resultados");
+/**
+ * Salva uma sessão de estudos na subcoleção 'history' do usuário.
+ * Estrutura: /users/{userId}/history/{documentId}
+ */
+export async function saveStudySession({
+  userId,
+  tema,
+  acertos,
+  erros,
+  totalQuestions,
+  dataISO,
+}) {
+  if (!userId) throw new Error("Usuário não identificado.");
 
-export async function saveResult({ userId, tema, acertos, erros, data }) {
-  return await addDoc(resultadosRef, {
-    userId,
+  // Referência para a subcoleção "history" dentro do documento do usuário
+  const historyRef = collection(db, "users", userId, "history");
+
+  const docRef = await addDoc(historyRef, {
     tema,
     acertos,
     erros,
-    data,
+    totalQuestions,
+    score: Math.round((acertos / totalQuestions) * 100), // Já salva a porcentagem
+    timestamp: dataISO || new Date().toISOString(),
+    type: "quiz",
   });
+
+  return docRef;
 }
 
-export async function getUserResults(userId) {
-  const q = query(resultadosRef, where("userId", "==", userId));
+/**
+ * Busca todo o histórico de estudos de um usuário específico.
+ */
+export async function getUserHistory(userId) {
+  if (!userId) return [];
+
+  const historyRef = collection(db, "users", userId, "history");
+  // Ordena por data (mais recente primeiro)
+  const q = query(historyRef, orderBy("timestamp", "desc"));
+
   const snapshot = await getDocs(q);
-  return snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+  return snapshot.docs.map((doc) => ({
+    id: doc.id,
+    ...doc.data(),
+  }));
 }
