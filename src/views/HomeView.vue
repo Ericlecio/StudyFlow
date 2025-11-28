@@ -42,9 +42,8 @@ onAuthStateChanged(auth, (u) => (user.value = u));
 
 <style scoped>
 .home {
-  /* Variáveis de Cores */
   --bg-dark: #050507;
-  --navy-card: rgba(23, 26, 74, 0.7); /* Mais transparente para efeito vidro */
+  --navy-card: rgba(23, 26, 74, 0.7);
   --navy-border: #2a2d6a;
   --text-light: #ffffff;
   --text-gray: #a0a3b5;
@@ -60,10 +59,9 @@ onAuthStateChanged(auth, (u) => (user.value = u));
   padding: 24px;
   position: relative;
   overflow: hidden;
-  font-family: "Inter", system-ui, sans-serif; /* Sugestão de fonte moderna */
+  font-family: "Inter", system-ui, sans-serif;
 }
 
-/* --- Fundo Animado (Blob) --- */
 .background-glow {
   position: absolute;
   top: -20%;
@@ -88,9 +86,8 @@ onAuthStateChanged(auth, (u) => (user.value = u));
   text-align: center;
 }
 
-/* --- Animações de Entrada (Keyframes no final) --- */
 .header {
-  margin-bottom: 50px;
+  margin-bottom: 20px;
   opacity: 0;
   animation: fadeInUp 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
 }
@@ -103,7 +100,6 @@ onAuthStateChanged(auth, (u) => (user.value = u));
   line-height: 1.1;
 }
 
-/* Texto Gradiente Animado */
 .brand-highlight {
   background: linear-gradient(135deg, #4e73df 0%, #7096ff 50%, #ffffff 100%);
   background-size: 200% auto;
@@ -116,7 +112,7 @@ onAuthStateChanged(auth, (u) => (user.value = u));
   color: var(--text-gray);
   font-size: 0.95rem;
   opacity: 0;
-  animation: fadeInUp 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) 0.2s forwards; /* Delay */
+  animation: fadeInUp 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) 0.2s forwards;
 }
 
 .user-email {
@@ -124,20 +120,19 @@ onAuthStateChanged(auth, (u) => (user.value = u));
   font-weight: 500;
 }
 
-/* --- Card de Estudo --- */
 .study-card {
   position: relative;
   background-color: var(--navy-card);
-  backdrop-filter: blur(12px); /* Efeito de vidro fosco */
+  backdrop-filter: blur(12px);
   border-radius: 24px;
   padding: 40px;
   text-align: center;
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 20px 50px -10px rgba(0, 0, 0, 0.5);
-  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); /* Efeito elástico */
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   overflow: hidden;
   opacity: 0;
-  animation: fadeInUp 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) 0.4s forwards; /* Delay maior */
+  animation: fadeInUp 0.8s cubic-bezier(0.2, 0.8, 0.2, 1) 0.4s forwards;
 }
 
 .study-card:hover {
@@ -146,7 +141,6 @@ onAuthStateChanged(auth, (u) => (user.value = u));
   box-shadow: 0 30px 60px -12px rgba(78, 115, 223, 0.15);
 }
 
-/* Brilho interno no hover do card */
 .card-glow-effect {
   position: absolute;
   top: 0;
@@ -187,7 +181,6 @@ onAuthStateChanged(auth, (u) => (user.value = u));
   font-size: 1.05rem;
 }
 
-/* --- Botão Moderno com Brilho --- */
 .action-link {
   text-decoration: none;
   display: block;
@@ -210,7 +203,6 @@ onAuthStateChanged(auth, (u) => (user.value = u));
   letter-spacing: 0.5px;
 }
 
-/* Efeito de brilho passando pelo botão */
 .btn-shine {
   position: absolute;
   top: 0;
@@ -234,7 +226,7 @@ onAuthStateChanged(auth, (u) => (user.value = u));
 .btn-primary:hover {
   background-color: #3b63d6;
   transform: translateY(-2px);
-  box-shadow: 0 8px 25px rgba(78, 115, 223, 0.5); /* Glow intenso */
+  box-shadow: 0 8px 25px rgba(78, 115, 223, 0.5);
 }
 
 .btn-primary:active {
@@ -242,9 +234,6 @@ onAuthStateChanged(auth, (u) => (user.value = u));
   box-shadow: 0 2px 10px rgba(78, 115, 223, 0.3);
 }
 
-/* --- Keyframes (Definição das Animações) --- */
-
-/* Aparecer de baixo para cima */
 @keyframes fadeInUp {
   from {
     opacity: 0;
@@ -256,14 +245,12 @@ onAuthStateChanged(auth, (u) => (user.value = u));
   }
 }
 
-/* Texto brilhante se movendo */
 @keyframes shineText {
   to {
     background-position: 200% center;
   }
 }
 
-/* Fundo pulsante */
 @keyframes pulseBackground {
   0% {
     transform: scale(1);
@@ -275,7 +262,6 @@ onAuthStateChanged(auth, (u) => (user.value = u));
   }
 }
 
-/* Ícone flutuando */
 @keyframes float {
   0%,
   100% {
@@ -286,7 +272,6 @@ onAuthStateChanged(auth, (u) => (user.value = u));
   }
 }
 
-/* Responsividade */
 @media (max-width: 480px) {
   .title {
     font-size: 2rem;

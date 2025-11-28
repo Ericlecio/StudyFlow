@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from "vue-router";
 import { auth } from "@/firebase";
+import { onAuthStateChanged } from "firebase/auth";
 
 import LoginView from "@/views/LoginView.vue";
 import RegisterView from "@/views/RegisterView.vue";
@@ -9,56 +10,53 @@ import HistoryView from "@/views/HistoryView.vue";
 import ReportView from "@/views/ReportView.vue";
 import ProfileView from "@/views/ProfileView.vue";
 
-const requireAuth = (to, from, next) => {
-  const user = auth.currentUser;
-  if (!user && to.path !== "/login" && to.path !== "/register") {
-    next("/login");
-  } else {
-    next();
-  }
+const getCurrentUser = () => {
+  return new Promise((resolve, reject) => {
+    const unsubscribe = onAuthStateChanged(
+      auth,
+      (user) => {
+        unsubscribe();
+        resolve(user);
+      },
+      reject
+    );
+  });
 };
 
 const routes = [
   { path: "/", redirect: "/home" },
-
   { path: "/login", name: "login", component: LoginView },
   { path: "/register", name: "register", component: RegisterView },
 
-  {
-    path: "/home",
-    name: "home",
-    component: HomeView,
-    beforeEnter: requireAuth,
-  },
-  {
-    path: "/questions",
-    name: "questions",
-    component: QuestionsView,
-    beforeEnter: requireAuth,
-  },
-  {
-    path: "/history",
-    name: "history",
-    component: HistoryView,
-    beforeEnter: requireAuth,
-  },
-  {
-    path: "/report",
-    name: "report",
-    component: ReportView,
-    beforeEnter: requireAuth,
-  },
-  {
-    path: "/profile",
-    name: "profile",
-    component: ProfileView,
-    beforeEnter: requireAuth,
-  },
+  { path: "/home", name: "home", component: HomeView },
+  { path: "/questions", name: "questions", component: QuestionsView },
+  { path: "/history", name: "history", component: HistoryView },
+  { path: "/report", name: "report", component: ReportView },
+  { path: "/profile", name: "profile", component: ProfileView },
 ];
 
 const router = createRouter({
   history: createWebHistory(),
   routes,
+});
+
+router.beforeEach(async (to, from, next) => {
+  const requiresAuth = to.matched.some(
+    (record) => record.path !== "/login" && record.path !== "/register"
+  );
+
+  if (!requiresAuth) {
+    return next();
+  }
+
+  const user = await getCurrentUser();
+
+  if (user) {
+    next();
+  } else {
+    console.log("Usuário não autenticado, redirecionando para login.");
+    next("/login");
+  }
 });
 
 export default router;

@@ -46,7 +46,6 @@ async function handleLogin() {
   try {
     loading.value = true;
     await loginWithGoogle();
-    // O redirecionamento ocorre no watcher acima
   } catch (error) {
     console.error("Erro no login:", error);
     alert("Falha ao entrar com Google.");
@@ -151,12 +150,7 @@ async function handleLogin() {
 }
 
 .divider span {
-  background: rgba(
-    23,
-    26,
-    74,
-    0.6
-  ); /* Mesma cor do card para "cortar" a linha */
+  background: rgba(23, 26, 74, 0.6);
   padding: 0 10px;
   color: #5c5f7a;
   font-size: 0.85rem;
