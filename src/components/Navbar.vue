@@ -10,13 +10,15 @@
           to="/home"
           class="nav-item"
           :class="{ active: isActive('/home') }"
-        >Home</router-link>
+          >Home</router-link
+        >
 
         <router-link
           to="/questions"
           class="nav-item"
           :class="{ active: isActive('/questions') }"
-        >Questões</router-link>
+          >Questões</router-link
+        >
       </div>
     </div>
 
