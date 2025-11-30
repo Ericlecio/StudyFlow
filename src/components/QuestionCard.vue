@@ -4,7 +4,7 @@
     :class="{ answered: isAnswered, 'ia-type': question.type === 'IA' }"
   >
     <div class="card-header">
-      <span :class="['type-tag', question.type.toLowerCase()]">
+      <span :class="['type-tag', question.type?.toLowerCase() || 'ia']">
         {{ question.type === "IA" ? "Gerada por IA" : "Concurso" }}
       </span>
       <span class="source-tag">{{ question.source }}</span>
@@ -27,16 +27,34 @@
           ></span>
           <span v-else class="radio-inner"></span>
         </div>
-
         <span class="option-text">{{ key }}) {{ text }}</span>
       </div>
     </div>
 
     <div v-if="isAnswered" class="footer-feedback">
-      <p :class="['feedback-message', isCorrect ? 'correct' : 'incorrect']">
-        <strong v-if="isCorrect">✔ Correto!</strong>
-        <strong v-else>❌ Errado! Resposta certa: {{ question.answer }}</strong>
-      </p>
+      <div class="result-msg">
+        <p :class="['feedback-message', isCorrect ? 'correct' : 'incorrect']">
+          <strong v-if="isCorrect">✔ Correto!</strong>
+          <strong v-else>❌ Errado! Resposta: {{ question.answer }}</strong>
+        </p>
+      </div>
+
+      <div class="difficulty-rating" v-if="!ratingGiven">
+        <span class="rate-label">Como foi essa questão?</span>
+        <div class="rate-buttons">
+          <button @click="rateDifficulty('easy')" class="rate-btn easy">
+            Fácil
+          </button>
+          <button @click="rateDifficulty('medium')" class="rate-btn medium">
+            Médio
+          </button>
+          <button @click="rateDifficulty('hard')" class="rate-btn hard">
+            Difícil
+          </button>
+        </div>
+      </div>
+      <div v-else class="rating-confirmed">Obrigado pelo feedback!</div>
+
       <button class="debate-btn" @click="$emit('debate')">
         Detalhes e Debate <span class="icon">💬</span>
       </button>
@@ -45,7 +63,7 @@
 </template>
 
 <script setup>
-import { computed } from "vue";
+import { computed, ref } from "vue";
 
 const props = defineProps({
   question: Object,
@@ -53,21 +71,24 @@ const props = defineProps({
   modelValue: String,
 });
 
-const emit = defineEmits(["update:modelValue", "debate"]);
+const emit = defineEmits(["update:modelValue", "debate", "rate-difficulty"]);
 
-const isAnswered = computed(() => {
-  return props.modelValue !== null;
-});
+const ratingGiven = ref(false);
 
-const isCorrect = computed(() => {
-  return isAnswered.value && props.modelValue === props.question.answer;
-});
+const isAnswered = computed(() => props.modelValue !== null);
+const isCorrect = computed(
+  () => isAnswered.value && props.modelValue === props.question.answer
+);
 
 function selectOption(key) {
-  if (isAnswered.value) {
-    return;
-  }
+  if (isAnswered.value) return;
   emit("update:modelValue", key);
+}
+
+function rateDifficulty(level) {
+  ratingGiven.value = true;
+  // Emite para o pai salvar a dificuldade
+  emit("rate-difficulty", { questionId: props.question.id, level });
 }
 
 function optionClasses(key) {
@@ -75,30 +96,18 @@ function optionClasses(key) {
     answered: isAnswered.value,
     selected: key === props.modelValue && !isAnswered.value,
   };
-
   if (isAnswered.value) {
-    if (key === props.question.answer) {
-      classes.correct = true;
-    } else if (key === props.modelValue && !isCorrect.value) {
+    if (key === props.question.answer) classes.correct = true;
+    else if (key === props.modelValue && !isCorrect.value)
       classes.incorrect = true;
-    }
   }
   return classes;
 }
 
 function getFeedbackIcon(key) {
-  if (!isAnswered.value) {
-    return key === props.modelValue ? "●" : "";
-  }
-
-  if (key === props.question.answer) {
-    return "✓";
-  }
-
-  if (key === props.modelValue && !isCorrect.value) {
-    return "✕";
-  }
-
+  if (!isAnswered.value) return key === props.modelValue ? "●" : "";
+  if (key === props.question.answer) return "✓";
+  if (key === props.modelValue && !isCorrect.value) return "✕";
   return null;
 }
 </script>
@@ -187,15 +196,12 @@ function getFeedbackIcon(key) {
   font-size: 14px;
   font-weight: bold;
   color: white;
-  transition: all 0.2s;
-  line-height: 1;
 }
 .option-circle .radio-inner {
   width: 10px;
   height: 10px;
   border-radius: 50%;
   background-color: transparent;
-  transition: all 0.2s;
 }
 
 .option-text {
@@ -232,9 +238,7 @@ function getFeedbackIcon(key) {
   padding-top: 15px;
   border-top: 1px dashed var(--color-border);
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
+  flex-direction: column;
   gap: 15px;
 }
 .feedback-message {
@@ -246,6 +250,52 @@ function getFeedbackIcon(key) {
 .feedback-message.incorrect {
   color: var(--color-error);
 }
+
+/* Difficulty Rating Styles */
+.difficulty-rating {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 5px;
+  flex-wrap: wrap;
+}
+.rate-label {
+  font-size: 0.85rem;
+  color: #a0a3b5;
+}
+.rate-buttons {
+  display: flex;
+  gap: 8px;
+}
+.rate-btn {
+  border: none;
+  padding: 5px 12px;
+  border-radius: 15px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: transform 0.1s;
+  color: #fff;
+  opacity: 0.8;
+}
+.rate-btn:hover {
+  transform: scale(1.05);
+  opacity: 1;
+}
+.rate-btn.easy {
+  background-color: #10b981;
+}
+.rate-btn.medium {
+  background-color: #f59e0b;
+}
+.rate-btn.hard {
+  background-color: #ef4444;
+}
+.rating-confirmed {
+  font-size: 0.85rem;
+  color: #10b981;
+  font-style: italic;
+}
+
 .debate-btn {
   background: var(--color-primary);
   color: white;
@@ -254,6 +304,7 @@ function getFeedbackIcon(key) {
   border-radius: 20px;
   cursor: pointer;
   font-weight: 600;
+  align-self: flex-start;
   transition: background 0.2s;
 }
 .debate-btn:hover {

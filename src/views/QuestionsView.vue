@@ -1,460 +1,420 @@
 <template>
-  <div class="page-dark">
-    <div class="container">
-      <header class="header">
-        <h1>StudyFlow</h1>
-        <p class="subtitle">Estude com foco em concursos e exames</p>
-      </header>
+  <div class="app-layout">
+    <button class="mobile-menu-btn" @click="isMobileSidebarOpen = true">
+      ☰
+    </button>
 
-      <SuggestionsCarousel
-        @selectTopic="
-          topic = $event;
-          handleGenerate();
-        "
+    <div class="sidebar-wrapper">
+      <StudySidebar
+        :currentTopicId="currentTopicId"
+        :isMobileOpen="isMobileSidebarOpen"
+        @select-topic="loadTopic"
+        @new-session="resetSession"
+        @close-mobile="isMobileSidebarOpen = false"
       />
+    </div>
 
-      <div class="search-box">
-        <div class="input-group">
-          <input
-            v-model="topic"
-            class="topic-input"
-            placeholder="Digite o assunto (ex: Direito Administrativo, Python, Enem...)"
-            @keyup.enter="handleGenerate"
-            :disabled="loading"
-          />
-          <div v-if="loading" class="loading-indicator">
-            <div class="spinner-small"></div>
-            <span>Buscando...</span>
+    <main class="main-content">
+      <div class="content-container">
+        <header class="header">
+          <h1>
+            StudyFlow
+            <span v-if="topic" class="breadcrumb">/ {{ topic }}</span>
+          </h1>
+        </header>
+
+        <div v-if="questions.length === 0 && !loading" class="new-session-view">
+          <SuggestionsCarousel @selectTopic="selectTopicAndGenerate" />
+          <div class="search-wrapper">
+            <div class="input-group">
+              <input
+                v-model="topicInput"
+                class="topic-input"
+                placeholder="O que vamos estudar hoje?"
+                @keyup.enter="startNewSession"
+              />
+              <button @click="startNewSession" class="btn-go">➔</button>
+            </div>
+          </div>
+          <FilterBar v-model="filters" />
+        </div>
+
+        <LoadingScreen v-if="loading" />
+
+        <div v-if="questions.length > 0 && !loading" class="quiz-view">
+          <div class="cards-list">
+            <QuestionCard
+              v-for="(q, index) in questions"
+              :key="q.id || index"
+              :question="q"
+              :index="index"
+              :modelValue="answers[index]"
+              @update:modelValue="(val) => handleAnswer(index, val)"
+              @rate-difficulty="handleDifficultyRating"
+              @debate="currentQuestion = q"
+            />
+          </div>
+
+          <div class="actions-bar">
+            <button
+              @click="generateMore"
+              :disabled="generatingMore"
+              class="action-btn secondary"
+            >
+              <span v-if="!generatingMore">🔄 Gerar Mais</span>
+              <span v-else>Criando...</span>
+            </button>
+            <button @click="saveAndExit" class="action-btn primary">
+              💾 Salvar Progresso
+            </button>
           </div>
         </div>
       </div>
+    </main>
 
-      <FilterBar v-model="filters" @update:modelValue="handleGenerate(true)" />
-
-      <div v-if="loading && questions.length === 0" class="loading-state">
-        <div class="spinner"></div>
-        <p>Pesquisando e gerando questões...</p>
-      </div>
-
-      <div v-if="questions.length > 0" class="quiz-area">
-        <div class="quiz-header">
-          <h2>
-            Resultados para: <span>{{ currentTopic }}</span>
-          </h2>
-          <span class="badge">{{ questions.length }} questões encontradas</span>
-        </div>
-
-        <div class="cards-list">
-          <QuestionCard
-            v-for="(q, index) in questions"
-            :key="q.id"
-            :question="q"
-            :index="index"
-            v-model="answers[index]"
-            @update:modelValue="saveState"
-            @debate="currentQuestion = q"
-          />
-        </div>
-
-        <div class="load-more-container">
-          <button
-            @click="handleLoadMore"
-            :disabled="loadingMore"
-            class="load-more-btn"
-          >
-            <span v-if="!loadingMore"
-              >Carregar mais questões sobre "{{ currentTopic }}"</span
-            >
-            <span v-else>Gerando reforço personalizado...</span>
-          </button>
-        </div>
-      </div>
-
-      <AIDebateModal
-        v-if="currentQuestion"
-        :question="currentQuestion"
-        @close="currentQuestion = null"
-      />
-    </div>
+    <AIDebateModal
+      v-if="currentQuestion"
+      :question="currentQuestion"
+      @close="currentQuestion = null"
+    />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from "vue";
+import { ref, onMounted } from "vue";
+import { useRoute, useRouter } from "vue-router";
+import { auth } from "@/firebase";
 import { generateQuestions } from "@/services/questionService";
+import { saveStudySession, getTopicHistory } from "@/services/firestoreService";
+import StudySidebar from "@/components/StudySidebar.vue";
+import LoadingScreen from "@/components/LoadingScreen.vue";
 import QuestionCard from "@/components/QuestionCard.vue";
 import SuggestionsCarousel from "@/components/SuggestionsCarousel.vue";
 import FilterBar from "@/components/FilterBar.vue";
 import AIDebateModal from "@/components/AIDebateModal.vue";
 
-const topic = ref("");
-const currentTopic = ref("");
+const route = useRoute();
+const router = useRouter();
+const isMobileSidebarOpen = ref(false);
 const loading = ref(false);
-const loadingMore = ref(false);
+const generatingMore = ref(false);
+const topic = ref("");
+const topicInput = ref("");
+const currentTopicId = ref(null);
+const filters = ref({ type: "mixed" });
 const questions = ref([]);
 const answers = ref([]);
-const filters = ref({ type: "mixed" });
 const currentQuestion = ref(null);
+const sessionPendingData = ref([]);
 
-const BATCH_SIZE = 5;
-const STORAGE_KEY = "quiz_state";
-
-onMounted(() => {
-  loadState();
+onMounted(async () => {
+  if (route.query.topicId) {
+    await loadTopicById(route.query.topicId, route.query.topicName);
+  }
 });
 
-function loadState() {
-  try {
-    const savedState = localStorage.getItem(STORAGE_KEY);
-    if (savedState) {
-      const state = JSON.parse(savedState);
-      questions.value = state.questions || [];
-      answers.value = state.answers || [];
-      currentTopic.value = state.currentTopic || "";
-      topic.value = state.currentTopic || "";
-      filters.value = state.filters || { type: "mixed" };
-    }
-  } catch (e) {
-    console.error("Erro ao carregar estado do localStorage:", e);
-    localStorage.removeItem(STORAGE_KEY);
-  }
+function resetSession() {
+  topic.value = "";
+  topicInput.value = "";
+  currentTopicId.value = null;
+  questions.value = [];
+  answers.value = [];
+  sessionPendingData.value = [];
+  isMobileSidebarOpen.value = false;
 }
 
-function saveState() {
-  const state = {
-    questions: questions.value,
-    answers: answers.value,
-    currentTopic: currentTopic.value,
-    filters: filters.value,
-  };
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+async function loadTopic(topicData) {
+  await loadTopicById(topicData.id, topicData.title);
 }
 
-async function handleGenerate(fromFilter = false) {
-  if (!topic.value.trim() && !fromFilter) return;
-
+async function loadTopicById(id, title) {
   loading.value = true;
+  currentTopicId.value = id;
+  topic.value = title;
 
-  if (!fromFilter) {
-    questions.value = [];
-    answers.value = [];
+  const user = auth.currentUser;
+  if (user) {
+    const history = await getTopicHistory(user.uid, id);
+    questions.value = history.map((h) => h.questionData);
+    answers.value = history.map((h) => h.userAnswer);
+    // IMPORTANTE: Restaurar dificuldade se existir
+    // Mas como o QuestionCard é stateless quanto a isso, o foco é nas novas
+    setTimeout(() => window.scrollTo(0, document.body.scrollHeight), 100);
   }
+  loading.value = false;
+}
 
-  currentTopic.value = topic.value;
+function selectTopicAndGenerate(selected) {
+  topic.value = selected;
+  generateMore();
+}
+
+async function startNewSession() {
+  if (!topicInput.value.trim()) return;
+  topic.value = topicInput.value;
+  await generateMore();
+}
+
+async function generateMore() {
+  generatingMore.value = true;
+  if (questions.value.length === 0) loading.value = true;
 
   try {
-    const result = await generateQuestions(
-      topic.value,
-      BATCH_SIZE,
-      filters.value
-    );
-
-    if (!fromFilter) {
-      questions.value = result;
-      answers.value = Array(result.length).fill(null);
-    } else {
-      questions.value = result;
-      answers.value = Array(result.length).fill(null);
-    }
-
-    saveState();
-  } catch (err) {
-    console.error("Erro:", err);
-    alert(err.message || "Erro ao buscar questões.");
+    const newQuestions = await generateQuestions(topic.value, 5, filters.value);
+    const processedQuestions = newQuestions.map((q) => ({
+      ...q,
+      id: q.id || `temp_${Date.now()}_${Math.random()}`,
+    }));
+    questions.value.push(...processedQuestions);
+    answers.value.push(...Array(processedQuestions.length).fill(null));
+  } catch (e) {
+    alert("Erro ao conectar com a IA.");
   } finally {
     loading.value = false;
+    generatingMore.value = false;
   }
 }
 
-async function handleLoadMore() {
-  loadingMore.value = true;
+function handleAnswer(index, val) {
+  answers.value[index] = val;
+  const questionObj = questions.value[index];
+  const record = {
+    questionData: questionObj,
+    userAnswer: val,
+    isCorrect: val === questionObj.answer,
+    difficulty: "medium", // Valor padrão caso o usuário não vote
+  };
+  const pendingIndex = sessionPendingData.value.findIndex(
+    (q) => q.questionData.id === questionObj.id
+  );
+
+  if (pendingIndex >= 0) {
+    sessionPendingData.value[pendingIndex] = record;
+  } else {
+    sessionPendingData.value.push(record);
+  }
+}
+
+// NOVO: Captura a dificuldade escolhida no card
+function handleDifficultyRating({ questionId, level }) {
+  const pendingIndex = sessionPendingData.value.findIndex(
+    (q) => q.questionData.id === questionId
+  );
+  if (pendingIndex >= 0) {
+    sessionPendingData.value[pendingIndex].difficulty = level;
+    console.log(`Questão ${questionId} marcada como ${level}`);
+  }
+}
+
+async function saveAndExit() {
+  const user = auth.currentUser;
+  if (!user) return router.push("/login");
+  if (sessionPendingData.value.length === 0 && questions.length > 0) {
+    return router.push("/profile");
+  }
   try {
-    // Lógica de erros para reforço da IA
-    const recentErrors = questions.value.filter((q, index) => {
-      const ans = answers.value[index];
-      return ans && ans !== q.answer;
+    const correctCount = sessionPendingData.value.filter(
+      (q) => q.isCorrect
+    ).length;
+    await saveStudySession(user.uid, {
+      tema: topic.value,
+      totalQuestions: sessionPendingData.value.length,
+      acertos: correctCount,
+      score:
+        sessionPendingData.value.length > 0
+          ? Math.round((correctCount / sessionPendingData.value.length) * 100)
+          : 0,
+      questionsDetails: sessionPendingData.value,
     });
-
-    let searchTopic = currentTopic.value;
-
-    if (recentErrors.length > 0) {
-      const errorContext = recentErrors
-        .slice(-3)
-        .map((q) => q.question)
-        .join(". ");
-
-      searchTopic += `. O aluno errou anteriormente questões sobre: "${errorContext}". Gere novas questões focadas em reforçar os conceitos corretos para essas dúvidas, mas mantendo o tema principal.`;
-    }
-
-    const result = await generateQuestions(
-      searchTopic,
-      BATCH_SIZE,
-      filters.value
-    );
-
-    questions.value.push(...result);
-    const newAnswers = Array(result.length).fill(null);
-    answers.value.push(...newAnswers);
-
-    saveState();
-  } catch (err) {
-    console.error("Erro:", err);
-    alert("Não foi possível carregar mais questões.");
-  } finally {
-    loadingMore.value = false;
+    sessionPendingData.value = [];
+    router.push("/profile");
+  } catch (e) {
+    alert("Erro ao salvar progresso.");
   }
 }
 </script>
 
 <style scoped>
-/* Variáveis de cores para consistência */
-:root {
-  --color-primary: #4e73df;
-  --color-secondary: #7096ff;
-  --color-bg-dark: #050507;
-  --color-card-dark: #111116;
-  --color-border: #2a2d6a;
-  --color-success: #10b981;
-  --color-error: #ef4444;
+/* CSS Reset Global Simples para este componente */
+* {
+  box-sizing: border-box;
 }
 
-/* --- QuestionView.vue (Global Styles) --- */
-
-.page-dark {
-  background-color: var(--color-bg-dark);
-  min-height: 100vh;
+/* Layout Grid Robusto */
+.app-layout {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  height: 100vh;
+  width: 100%;
+  background-color: #050507;
   color: white;
-  padding: 40px 20px;
   font-family: "Inter", sans-serif;
+  overflow: hidden;
+  position: relative;
 }
 
-.container {
-  max-width: 1200px;
+/* Wrapper da Sidebar (Controla espaço no grid) */
+.sidebar-wrapper {
+  height: 100%;
+  position: relative;
+  z-index: 20;
+}
+
+/* Área Principal */
+.main-content {
+  position: relative;
+  height: 100%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background-color: #050507;
+  width: 100%;
+  min-width: 0; /* Impede estouro horizontal */
+}
+
+.content-container {
+  width: 100%;
+  max-width: 1000px;
+  padding: 40px 20px;
   margin: 0 auto;
-  padding: 0 15px;
+  padding-bottom: 100px;
 }
 
+/* Header */
 .header {
   text-align: center;
-  margin-bottom: 40px;
+  margin: 20px 0 30px 0;
 }
-
-/* CORREÇÃO DO TÍTULO */
 .header h1 {
-  font-size: 2.5rem;
+  font-size: 2rem;
   font-weight: 800;
-  margin-bottom: 10px;
-  text-shadow: 0 0 5px rgba(78, 115, 223, 0.2);
-  color: #2a2d6a;
+  background: linear-gradient(135deg, #4e73df, #7096ff);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: #4e73df;
 }
-
-.subtitle {
+.breadcrumb {
+  font-weight: 300;
   color: #a0a3b5;
-  font-size: 1.1rem;
+  -webkit-text-fill-color: #a0a3b5;
 }
 
-/* Search Box */
-.search-box {
-  background: #171a4a;
-  padding: 20px;
-  border-radius: 16px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-  margin-bottom: 20px;
+/* Input Search */
+.new-session-view {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  margin-top: 10px;
+}
+
+.search-wrapper {
+  margin: 30px 0;
+  width: 100%;
+  display: flex;
+  justify-content: center;
 }
 
 .input-group {
-  display: flex;
-  gap: 12px;
-  align-items: center;
   position: relative;
-  border-radius: 12px;
-  overflow: hidden;
-}
-
-/* Borda Animada do Input */
-.input-group::before {
-  content: "";
-  position: absolute;
-  top: -2px;
-  left: -2px;
-  right: -2px;
-  bottom: -2px;
-  background: linear-gradient(
-    45deg,
-    #0a0a0c,
-    var(--color-primary),
-    var(--color-secondary),
-    #0a0a0c
-  );
-  background-size: 400% 400%;
+  width: 100%;
+  max-width: 700px;
+  display: flex;
+  align-items: center;
   border-radius: 14px;
-  z-index: 1;
-  animation: borderAnimation 8s ease infinite;
-  opacity: 0;
-  transition: opacity 0.3s;
-  pointer-events: none;
+  background: linear-gradient(45deg, #0a0a0c, #4e73df, #7096ff, #0a0a0c);
+  background-size: 400%;
+  padding: 2px;
+  animation: borderAnim 8s infinite linear;
 }
 
-.input-group:focus-within::before,
-.input-group:has(.loading-indicator)::before {
-  opacity: 1;
-}
-
-@keyframes borderAnimation {
+@keyframes borderAnim {
   0% {
     background-position: 0% 50%;
   }
-  50% {
-    background-position: 100% 50%;
-  }
   100% {
-    background-position: 0% 50%;
+    background-position: 100% 50%;
   }
 }
 
 .topic-input {
   flex: 1;
   background: #0a0a0c;
-  border: 2px solid transparent;
+  border: none;
   padding: 16px 20px;
-  border-radius: 10px;
+  border-radius: 12px;
   color: white;
-  font-size: 1.1rem;
-  transition: border-color 0.2s, box-shadow 0.3s;
-  width: 100%;
-  position: relative;
-  z-index: 2;
-}
-
-.topic-input:focus {
+  font-size: 1rem;
   outline: none;
-  border-color: var(--color-primary);
-  box-shadow: 0 0 0 3px rgba(78, 115, 223, 0.3);
-  animation: subtlePulse 1.5s infinite alternate;
+  width: 100%;
 }
 
-@keyframes subtlePulse {
-  0% {
-    box-shadow: 0 0 0 3px rgba(78, 115, 223, 0.3),
-      0 0 8px rgba(78, 115, 223, 0.5);
-  }
-  100% {
-    box-shadow: 0 0 0 6px rgba(78, 115, 223, 0.1),
-      0 0 15px rgba(78, 115, 223, 0.6);
-  }
-}
-
-.loading-indicator {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 16px 20px;
-  color: var(--color-secondary);
-  font-weight: 600;
-  border-radius: 10px;
-  background: #0a0a0c;
-  min-width: 150px;
-  justify-content: center;
-  position: relative;
-  z-index: 2;
-}
-
-.spinner-small {
-  width: 20px;
-  height: 20px;
-  border: 3px solid var(--color-border);
-  border-top-color: var(--color-primary);
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-.quiz-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 25px;
-  padding-bottom: 15px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.quiz-header h2 {
+.btn-go {
+  position: absolute;
+  right: 10px;
+  background: none;
+  border: none;
+  color: #4e73df;
   font-size: 1.2rem;
-  color: #a0a3b5;
+  cursor: pointer;
+  z-index: 5;
+  padding: 10px;
 }
 
-.quiz-header h2 span {
-  color: white;
-  font-weight: 700;
-}
-
-.badge {
-  background: var(--color-border);
-  padding: 6px 14px;
-  border-radius: 20px;
-  font-size: 0.85rem;
-  color: var(--color-secondary);
-  border: 1px solid rgba(78, 115, 223, 0.3);
-}
-
-/* CORREÇÃO DO LAYOUT DE GRID */
+/* Quiz Grid */
 .cards-list {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(480px, 1fr));
-  gap: 30px 20px;
-  padding: 0;
-  margin: 0;
+  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
+  gap: 20px;
+  margin-bottom: 40px;
+  width: 100%;
 }
 
-.load-more-container {
-  margin-top: 40px;
-  text-align: center;
-  padding-top: 20px;
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+/* Ações */
+.actions-bar {
+  display: flex;
+  justify-content: center;
+  gap: 15px;
+  padding-bottom: 40px;
+  flex-wrap: wrap;
 }
 
-.load-more-btn {
-  background: linear-gradient(
-    135deg,
-    var(--color-primary) 0%,
-    var(--color-secondary) 100%
-  );
-  color: white;
-  border: none;
-  padding: 14px 28px;
+.action-btn {
+  padding: 12px 24px;
   border-radius: 30px;
-  font-size: 1rem;
   font-weight: 600;
   cursor: pointer;
-  transition: all 0.2s;
-  box-shadow: 0 5px 15px rgba(78, 115, 223, 0.4);
+  transition: transform 0.2s;
+  border: none;
+}
+.action-btn.primary {
+  background: linear-gradient(90deg, #10b981, #059669);
+  color: white;
+}
+.action-btn.secondary {
+  background: transparent;
+  border: 1px solid #4e73df;
+  color: #4e73df;
+}
+.action-btn:hover {
+  transform: translateY(-2px);
 }
 
-.load-more-btn:hover:not(:disabled) {
-  transform: translateY(-3px) scale(1.02);
-  box-shadow: 0 8px 20px rgba(78, 115, 223, 0.6);
-  filter: brightness(1.1);
-}
-
-.load-more-btn:disabled {
-  opacity: 0.6;
-  cursor: wait;
-  box-shadow: none;
-}
-
+/* Loading */
 .loading-state {
-  text-align: center;
-  padding: 60px;
-  color: #a0a3b5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 50px;
 }
-
 .spinner {
-  width: 50px;
-  height: 50px;
-  border: 4px solid var(--color-border);
-  border-top-color: var(--color-primary);
+  width: 40px;
+  height: 40px;
+  border: 3px solid #2a2d6a;
+  border-top-color: #4e73df;
   border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin: 0 auto 20px;
+  animation: spin 1s infinite linear;
 }
 @keyframes spin {
   to {
@@ -462,493 +422,60 @@ async function handleLoadMore() {
   }
 }
 
-/* Responsividade QuestionView */
-@media (max-width: 1050px) {
+/* Mobile Toggle */
+.mobile-menu-btn {
+  position: fixed;
+  top: 15px;
+  left: 15px;
+  z-index: 50;
+  background: #171a4a;
+  border: 1px solid #2a2d6a;
+  color: white;
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: none;
+  font-size: 1.5rem;
+}
+
+/* RESPONSIVIDADE */
+@media (max-width: 900px) {
   .cards-list {
     grid-template-columns: 1fr;
-    gap: 30px 0;
   }
-}
-@media (max-width: 600px) {
-  .input-group {
-    flex-direction: column;
-    gap: 10px;
-  }
-  .loading-indicator {
-    width: 100%;
-    padding: 12px 0;
-  }
-  .header h1 {
-    font-size: 2rem;
-  }
-}
-
-/* --- SuggestionsCarousel.vue --- */
-
-.carousel-container {
-  margin-top: 30px;
-  margin-bottom: 30px;
-}
-.carousel-container h3 {
-  font-size: 1.1rem;
-  color: #7096ff;
-  margin-bottom: 15px;
-}
-.carousel-wrapper {
-  display: flex;
-  align-items: center;
-}
-.carousel-content {
-  display: flex;
-  overflow-x: scroll;
-  scroll-snap-type: x mandatory;
-  -webkit-overflow-scrolling: touch;
-  gap: 10px;
-  padding: 5px 0;
-  flex-grow: 1;
-}
-.carousel-content::-webkit-scrollbar {
-  display: none;
-}
-.topic-card {
-  flex-shrink: 0;
-  background: #171a4a;
-  color: white;
-  padding: 10px 15px;
-  border-radius: 20px;
-  font-size: 0.9rem;
-  cursor: pointer;
-  border: 1px solid #2a2d6a;
-  transition: background 0.2s, transform 0.2s;
-  scroll-snap-align: start;
-}
-.topic-card:hover {
-  background: #2a2d6a;
-  transform: translateY(-1px);
-}
-.nav-btn {
-  background: none;
-  border: none;
-  color: #7096ff;
-  font-size: 2rem;
-  cursor: pointer;
-  padding: 0 10px;
-  flex-shrink: 0;
-}
-
-/* --- FilterBar.vue --- */
-
-.filter-bar {
-  margin-top: 20px;
-  margin-bottom: 30px;
-  padding: 15px 20px;
-  background: #0a0a0c;
-  border: 1px solid #2a2d6a;
-  border-radius: 12px;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 20px;
-}
-.filter-bar label {
-  color: #a0a3b5;
-  font-weight: 600;
-  font-size: 0.95rem;
-  white-space: nowrap;
-}
-.filter-options {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  flex-grow: 1;
-  justify-content: flex-end;
-}
-.filter-options button {
-  background: #171a4a;
-  color: #a0a3b5;
-  border: 1px solid #2a2d6a;
-  padding: 10px 18px;
-  border-radius: 25px;
-  font-size: 0.9rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-.filter-options button:hover:not(.active) {
-  background: #2a2d6a;
-  color: white;
-}
-.filter-options button.active {
-  background: linear-gradient(135deg, #4e73df 0%, #7096ff 100%);
-  color: white;
-  border-color: transparent;
-  box-shadow: 0 4px 12px rgba(78, 115, 223, 0.3);
-}
-
-@media (max-width: 600px) {
-  .filter-bar {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 15px;
-  }
-  .filter-options {
-    width: 100%;
-    justify-content: center;
-  }
-}
-
-/* --- QuestionCard.vue --- */
-
-.question-card {
-  background: var(--color-card-dark);
-  padding: 25px;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  box-shadow: 0 5px 20px rgba(0, 0, 0, 0.2);
-  transition: all 0.3s;
-}
-
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 15px;
-}
-.type-tag,
-.source-tag {
-  padding: 5px 10px;
-  border-radius: 15px;
-  font-size: 0.8rem;
-  font-weight: 600;
-}
-.type-tag.ia {
-  background: rgba(78, 115, 223, 0.2);
-  color: var(--color-primary);
-}
-.type-tag.concurso {
-  background: rgba(16, 185, 129, 0.2);
-  color: var(--color-success);
-}
-.source-tag {
-  color: #a0a3b5;
-  font-style: italic;
-  font-weight: 400;
-}
-
-.question-text {
-  font-size: 1.15rem;
-  font-weight: 500;
-  color: white;
-  margin-bottom: 25px;
-  line-height: 1.6;
-}
-.options-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.option-item {
-  display: flex;
-  align-items: flex-start;
-  gap: 15px;
-  padding: 12px 15px;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: all 0.2s;
-  border: 1px solid transparent;
-}
-.option-item:hover:not(.answered) {
-  background-color: #171a4a;
-  border-color: rgba(78, 115, 223, 0.3);
-}
-
-.option-circle {
-  min-width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  border: 2px solid #a0a3b5;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  font-size: 14px;
-  font-weight: bold;
-  color: white;
-  transition: all 0.2s;
-  line-height: 1;
-}
-.option-circle .radio-inner {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background-color: transparent;
-  transition: all 0.2s;
-}
-
-.option-text {
-  color: #e0e0e0;
-  line-height: 1.5;
-  flex-grow: 1;
-}
-
-.option-item.correct {
-  background-color: #1f3b30;
-  border-color: var(--color-success);
-}
-.option-item.correct .option-circle {
-  border-color: var(--color-success);
-  background-color: var(--color-success);
-}
-.option-item.incorrect {
-  background-color: #3b2828;
-  border-color: var(--color-error);
-}
-.option-item.incorrect .option-circle {
-  border-color: var(--color-error);
-  background-color: var(--color-error);
-}
-.option-item.answered {
-  cursor: default;
-}
-.option-item.answered:not(.correct):not(.incorrect) {
-  opacity: 0.6;
-}
-
-.footer-feedback {
-  margin-top: 20px;
-  padding-top: 15px;
-  border-top: 1px dashed var(--color-border);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 15px;
-}
-.feedback-message {
-  font-size: 1.1rem;
-}
-.feedback-message.correct {
-  color: var(--color-success);
-}
-.feedback-message.incorrect {
-  color: var(--color-error);
-}
-.debate-btn {
-  background: var(--color-primary);
-  color: white;
-  border: none;
-  padding: 8px 15px;
-  border-radius: 20px;
-  cursor: pointer;
-  font-weight: 600;
-  transition: background 0.2s;
-}
-.debate-btn:hover {
-  background: #3b63d6;
-}
-.debate-btn .icon {
-  margin-left: 5px;
-  font-size: 1.1rem;
-}
-
-/* --- AIDebateModal.vue --- */
-
-@keyframes fadeInModal {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
-@keyframes slideInModal {
-  from {
-    transform: translateY(-50px);
-    opacity: 0;
-  }
-  to {
-    transform: translateY(0);
-    opacity: 1;
-  }
-}
-
-.modal-backdrop {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(0, 0, 0, 0.85);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1000;
-  animation: fadeInModal 0.3s ease-out;
-}
-.modal-content {
-  background: #0a0a0c;
-  padding: 30px;
-  border-radius: 16px;
-  width: 95%;
-  max-width: 1100px;
-  max-height: 90vh;
-  overflow-y: auto;
-  position: relative;
-  border: 2px solid #2a2d6a;
-  box-shadow: 0 15px 40px rgba(0, 0, 0, 0.7);
-  animation: slideInModal 0.3s ease-out;
-}
-.close-btn {
-  position: absolute;
-  top: 15px;
-  right: 15px;
-  background: none;
-  border: none;
-  color: #a0a3b5;
-  font-size: 1.5rem;
-  cursor: pointer;
-  transition: color 0.2s;
-}
-.close-btn:hover {
-  color: white;
-}
-
-.modal-content h2 {
-  color: #7096ff;
-  font-size: 1.6rem;
-  margin-bottom: 10px;
-  text-align: center;
-  font-weight: 700;
-}
-.question-text {
-  color: #e0e0e0;
-  margin-bottom: 25px;
-  padding-bottom: 15px;
-  border-bottom: 1px dashed #2a2d6a;
-  text-align: center;
-  font-size: 1.1rem;
-}
-
-.debate-area {
-  display: flex;
-  gap: 30px;
-}
-.explanation {
-  flex: 1;
-}
-.explanation h3 {
-  color: #10b981;
-  font-size: 1.2rem;
-  margin-bottom: 10px;
-  font-weight: 600;
-}
-.explanation p {
-  color: #a0a3b5;
-  line-height: 1.7;
-  font-size: 0.95rem;
-}
-
-.chat-interface {
-  flex: 1;
-  border-left: 1px solid #2a2d6a;
-  padding-left: 30px;
-}
-.chat-interface h4 {
-  color: #4e73df;
-  margin-bottom: 15px;
-  font-size: 1.2rem;
-  font-weight: 600;
-}
-.chat-log {
-  height: 280px;
-  overflow-y: auto;
-  background: #111116;
-  padding: 15px;
-  border-radius: 8px;
-  margin-bottom: 10px;
-  border: 1px solid #2a2d6a;
-}
-.message {
-  margin-bottom: 10px;
-  font-size: 0.95rem;
-  line-height: 1.5;
-  display: flex;
-}
-.message strong {
-  font-weight: 700;
-  margin-right: 5px;
-  white-space: nowrap;
-}
-.message.user {
-  justify-content: flex-end;
-  color: #fff;
-}
-.message.ai {
-  justify-content: flex-start;
-  color: #a0a3b5;
-}
-.message.user strong {
-  color: #7096ff;
-}
-.message.ai strong {
-  color: #10b981;
-}
-
-.chat-input-group {
-  display: flex;
-  gap: 10px;
-}
-.chat-input-group input {
-  flex: 1;
-  padding: 12px;
-  border-radius: 8px;
-  border: 1px solid #2a2d6a;
-  background: #0a0a0c;
-  color: white;
-  font-size: 1rem;
-  transition: border-color 0.2s;
-}
-.chat-input-group input:focus {
-  outline: none;
-  border-color: #4e73df;
-}
-.chat-input-group button {
-  background: #4e73df;
-  color: white;
-  border: none;
-  padding: 10px 15px;
-  border-radius: 8px;
-  cursor: pointer;
-  font-weight: 600;
-  transition: background 0.2s, box-shadow 0.2s;
-}
-.chat-input-group button:hover:not(:disabled) {
-  background: #3b63d6;
-}
-.chat-input-group button:disabled {
-  background: #2a2d6a;
-  cursor: wait;
-  opacity: 0.8;
 }
 
 @media (max-width: 768px) {
-  .debate-area {
-    flex-direction: column;
-    gap: 20px;
+  .app-layout {
+    display: block;
+    position: relative;
+    height: 100vh;
   }
-  .chat-interface {
-    border-left: none;
-    padding-left: 0;
-    border-top: 1px solid #2a2d6a;
-    padding-top: 20px;
+
+  .mobile-menu-btn {
+    display: block;
   }
-  .modal-content {
+
+  /* Sidebar absoluta no mobile */
+  .sidebar-wrapper {
+    position: absolute;
+    z-index: 100;
+  }
+
+  .main-content {
+    width: 100%;
+    height: 100%;
+    padding-top: 60px;
+  }
+
+  .content-container {
     padding: 20px 15px;
   }
-  .chat-input-group {
-    flex-direction: column;
+  .header h1 {
+    font-size: 1.8rem;
   }
-  .chat-input-group button {
-    width: 100%;
+  .input-group {
+    max-width: 100%;
   }
 }
 </style>

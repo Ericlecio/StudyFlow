@@ -1,52 +1,43 @@
 <template>
   <div class="page-dark">
     <div class="container">
-      <header>
-        <h1>Relatório de Desempenho</h1>
+      <header class="header">
+        <h1>Relatório Geral</h1>
+        <p class="subtitle">
+          Análise baseada em {{ stats.totalTopics }} tópicos de estudo
+        </p>
       </header>
 
-      <div v-if="loading" class="loading">
+      <div v-if="loading" class="loading-state">
         <div class="spinner"></div>
       </div>
 
-      <div v-else-if="stats.totalQuizzes === 0" class="empty-state">
+      <div v-else-if="stats.totalTopics === 0" class="empty-state">
         <p>Sem dados suficientes para gerar relatório.</p>
       </div>
 
-      <div v-else class="dashboard">
-        <div class="stats-grid">
-          <div class="stat-card">
-            <h3>Quizzes</h3>
-            <p class="big-number">{{ stats.totalQuizzes }}</p>
+      <div v-else class="dashboard-grid">
+        <div class="stat-card highlight">
+          <h3>Taxa de Acerto Global</h3>
+          <div class="big-number" :class="getScoreClass(stats.averageScore)">
+            {{ stats.averageScore }}%
           </div>
-          <div class="stat-card">
-            <h3>Média Geral</h3>
-            <p class="big-number" :class="getScoreClass(stats.averageScore)">
-              {{ stats.averageScore }}%
-            </p>
-          </div>
-          <div class="stat-card">
-            <h3>Questões Respondidas</h3>
-            <p class="big-number">{{ stats.totalQuestions }}</p>
-          </div>
+          <p class="stat-detail">
+            {{ stats.totalCorrect }} acertos em
+            {{ stats.totalQuestions }} questões
+          </p>
         </div>
 
-        <div class="insights-section">
-          <div class="insight-card">
-            <h3>🔥 Melhor Desempenho</h3>
-            <p v-if="stats.bestTopic" class="topic-name">
-              {{ stats.bestTopic }}
-            </p>
-            <p v-else class="no-data">-</p>
-          </div>
+        <div class="stat-card">
+          <h3>Tópico Dominante</h3>
+          <div class="icon-stat">🔥</div>
+          <p class="topic-name">{{ stats.bestTopic || "N/A" }}</p>
+        </div>
 
-          <div class="insight-card warning">
-            <h3>⚠️ Precisa Melhorar</h3>
-            <p v-if="stats.worstTopic" class="topic-name">
-              {{ stats.worstTopic }}
-            </p>
-            <p v-else class="no-data">-</p>
-          </div>
+        <div class="stat-card">
+          <h3>Ponto de Atenção</h3>
+          <div class="icon-stat">⚠️</div>
+          <p class="topic-name">{{ stats.worstTopic || "N/A" }}</p>
         </div>
       </div>
     </div>
@@ -56,51 +47,69 @@
 <script setup>
 import { ref, onMounted } from "vue";
 import { auth } from "@/firebase";
-import { getUserHistory } from "@/services/firestoreService"; // <--- Importação CORRETA
+// CORREÇÃO: Importa getUserTopics em vez de getUserHistory
+import { getUserTopics } from "@/services/firestoreService";
 
 const loading = ref(true);
 const stats = ref({
-  totalQuizzes: 0,
+  totalTopics: 0,
   totalQuestions: 0,
+  totalCorrect: 0,
   averageScore: 0,
   bestTopic: "",
   worstTopic: "",
 });
 
 onMounted(async () => {
-  const user = auth.currentUser;
-  if (user) {
-    try {
-      const history = await getUserHistory(user.uid);
-      calculateStats(history);
-    } catch (e) {
-      console.error("Erro relatório:", e);
+  // Pequeno delay para garantir que o Auth carregou
+  setTimeout(async () => {
+    const user = auth.currentUser;
+    if (user) {
+      try {
+        // Busca a lista de Tópicos
+        const topics = await getUserTopics(user.uid);
+        processStats(topics);
+      } catch (e) {
+        console.error("Erro ao gerar relatório:", e);
+      }
     }
-  }
-  loading.value = false;
+    loading.value = false;
+  }, 500);
 });
 
-function calculateStats(history) {
-  if (history.length === 0) return;
+function processStats(topics) {
+  if (!topics || topics.length === 0) return;
 
-  const totalQuizzes = history.length;
-  const totalQuestions = history.reduce(
-    (acc, curr) => acc + (curr.totalQuestions || 0),
+  const totalTopics = topics.length;
+  // Soma os dados que já estão agregados nos tópicos
+  const totalQuestions = topics.reduce(
+    (acc, t) => acc + (t.totalQuestions || 0),
+    0
+  );
+  const totalCorrect = topics.reduce(
+    (acc, t) => acc + (t.totalCorrect || 0),
     0
   );
 
-  const sumScores = history.reduce((acc, curr) => acc + (curr.score || 0), 0);
-  const averageScore = Math.round(sumScores / totalQuizzes);
+  // Média ponderada global
+  const averageScore =
+    totalQuestions > 0 ? Math.round((totalCorrect / totalQuestions) * 100) : 0;
 
-  // Lógica simples para melhor/pior tema (baseado na última ocorrência ou média)
-  // Aqui pegamos o tema com a maior nota individual para simplificar
-  const sortedByScore = [...history].sort((a, b) => b.score - a.score);
-  const bestTopic = sortedByScore[0]?.tema || "";
-  const worstTopic = sortedByScore[sortedByScore.length - 1]?.tema || "";
+  // Ordena por score para achar melhor/pior tópico
+  const sorted = [...topics].sort((a, b) => b.score - a.score);
+
+  const bestTopic = sorted[0]?.title || "";
+  let worstTopic = sorted[sorted.length - 1]?.title || "";
+
+  // Se o melhor for igual ao pior (só tem 1 tópico) ou a nota for alta, não mostra "pior"
+  if (bestTopic === worstTopic || sorted[sorted.length - 1]?.score >= 80) {
+    worstTopic = "-";
+  }
 
   stats.value = {
-    totalQuizzes,
+    totalTopics,
     totalQuestions,
+    totalCorrect,
     averageScore,
     bestTopic,
     worstTopic,
@@ -108,118 +117,89 @@ function calculateStats(history) {
 }
 
 function getScoreClass(score) {
-  if (score >= 80) return "high";
-  if (score >= 50) return "medium";
-  return "low";
+  if (score >= 80) return "text-green";
+  if (score >= 60) return "text-yellow";
+  return "text-red";
 }
 </script>
 
 <style scoped>
+/* Reuse os estilos globais ou copie abaixo */
 .page-dark {
-  background-color: #131314;
+  background-color: #050507;
   min-height: 100vh;
-  color: #e3e3e3;
+  color: white;
   padding: 40px 20px;
+  font-family: "Inter", sans-serif;
 }
-
 .container {
-  max-width: 800px;
+  max-width: 900px;
   margin: 0 auto;
 }
-
-h1 {
+.header {
   text-align: center;
   margin-bottom: 40px;
-  background: linear-gradient(90deg, #c58af9, #8ab4f8);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+}
+.subtitle {
+  color: #a0a3b5;
 }
 
-.stats-grid {
+.dashboard-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
   gap: 20px;
-  margin-bottom: 40px;
 }
-
 .stat-card {
-  background: #1e1f20;
-  padding: 24px;
+  background: #111116;
+  padding: 30px;
   border-radius: 16px;
+  border: 1px solid #2a2d6a;
   text-align: center;
-  border: 1px solid #3c4043;
 }
-
-.stat-card h3 {
-  color: #9aa0a6;
-  font-size: 0.9rem;
-  text-transform: uppercase;
-  margin-bottom: 10px;
+.stat-card.highlight {
+  grid-column: 1 / -1;
+  background: linear-gradient(135deg, #111116 0%, #1a1a2e 100%);
+  border-color: #4e73df;
 }
 
 .big-number {
-  font-size: 3rem;
-  font-weight: 700;
-  color: white;
+  font-size: 3.5rem;
+  font-weight: 800;
+  margin: 10px 0;
 }
-
-.high {
-  color: #81c995;
+.text-green {
+  color: #10b981;
 }
-.medium {
-  color: #fdd663;
+.text-yellow {
+  color: #f59e0b;
 }
-.low {
-  color: #f28b82;
+.text-red {
+  color: #ef4444;
 }
-
-.insights-section {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-}
-
-.insight-card {
-  background: #1e1f20;
-  padding: 24px;
-  border-radius: 16px;
-  border-left: 4px solid #81c995;
-}
-
-.insight-card.warning {
-  border-left-color: #f28b82;
-}
-
-.insight-card h3 {
-  font-size: 1.1rem;
-  margin-bottom: 10px;
-  color: #e8eaed;
-}
-
 .topic-name {
   font-size: 1.2rem;
-  font-weight: 500;
+  font-weight: 600;
+  margin: 10px 0;
+  color: #fff;
 }
-
-/* Responsividade */
-@media (max-width: 600px) {
-  .insights-section {
-    grid-template-columns: 1fr;
-  }
+.icon-stat {
+  font-size: 2rem;
+  margin-bottom: 10px;
 }
-
-.loading {
-  display: flex;
-  justify-content: center;
-  margin-top: 50px;
+.loading-state,
+.empty-state {
+  text-align: center;
+  padding: 50px;
+  color: #a0a3b5;
 }
 .spinner {
   width: 40px;
   height: 40px;
-  border: 3px solid #3c4043;
-  border-top-color: #c58af9;
+  border: 3px solid #2a2d6a;
+  border-top-color: #4e73df;
   border-radius: 50%;
   animation: spin 1s linear infinite;
+  margin: 0 auto;
 }
 @keyframes spin {
   to {

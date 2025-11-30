@@ -1,45 +1,43 @@
 <template>
   <div class="page-dark">
     <div class="container">
-      <header>
-        <h1>Histórico de Estudos</h1>
-        <p class="subtitle">Acompanhe sua evolução cronológica</p>
+      <header class="header">
+        <h1>Relatório Geral</h1>
+        <p class="subtitle">
+          Análise baseada em {{ stats.totalTopics }} tópicos de estudo
+        </p>
       </header>
 
-      <div v-if="loading" class="loading">
+      <div v-if="loading" class="loading-state">
         <div class="spinner"></div>
       </div>
 
-      <div v-else-if="history.length === 0" class="empty-state">
-        <p>Nenhum histórico encontrado.</p>
-        <router-link to="/questions" class="btn-start"
-          >Começar um Quiz</router-link
-        >
+      <div v-else-if="stats.totalTopics === 0" class="empty-state">
+        <p>Sem dados suficientes para gerar relatório.</p>
       </div>
 
-      <div v-else class="timeline">
-        <div v-for="item in history" :key="item.id" class="history-card">
-          <div class="card-header">
-            <span class="topic">{{ item.tema }}</span>
-            <span class="date">{{ formatDate(item.timestamp) }}</span>
+      <div v-else class="dashboard-grid">
+        <div class="stat-card highlight">
+          <h3>Taxa de Acerto Global</h3>
+          <div class="big-number" :class="getScoreClass(stats.averageScore)">
+            {{ stats.averageScore }}%
           </div>
+          <p class="stat-detail">
+            {{ stats.totalCorrect }} acertos em
+            {{ stats.totalQuestions }} questões
+          </p>
+        </div>
 
-          <div class="card-stats">
-            <div class="stat">
-              <span class="label">Acertos</span>
-              <span class="value text-green">{{ item.acertos }}</span>
-            </div>
-            <div class="stat">
-              <span class="label">Erros</span>
-              <span class="value text-red">{{ item.erros }}</span>
-            </div>
-            <div class="stat">
-              <span class="label">Nota</span>
-              <span class="value score" :class="getScoreClass(item.score)">
-                {{ item.score }}%
-              </span>
-            </div>
-          </div>
+        <div class="stat-card">
+          <h3>Tópico Dominante</h3>
+          <div class="icon-stat">🔥</div>
+          <p class="topic-name">{{ stats.bestTopic || "N/A" }}</p>
+        </div>
+
+        <div class="stat-card">
+          <h3>Ponto de Atenção</h3>
+          <div class="icon-stat">⚠️</div>
+          <p class="topic-name">{{ stats.worstTopic || "N/A" }}</p>
         </div>
       </div>
     </div>
@@ -49,185 +47,152 @@
 <script setup>
 import { ref, onMounted } from "vue";
 import { auth } from "@/firebase";
-import { getUserHistory } from "@/services/firestoreService"; // <--- Importação CORRETA aqui
+// CORREÇÃO: Usa getUserTopics em vez de getUserHistory
+import { getUserTopics } from "@/services/firestoreService";
 
-const history = ref([]);
 const loading = ref(true);
-
-onMounted(async () => {
-  const user = auth.currentUser;
-  if (user) {
-    try {
-      // Busca na subcoleção do usuário
-      history.value = await getUserHistory(user.uid);
-    } catch (e) {
-      console.error("Erro ao carregar histórico:", e);
-    }
-  }
-  loading.value = false;
+const stats = ref({
+  totalTopics: 0,
+  totalQuestions: 0,
+  totalCorrect: 0,
+  averageScore: 0,
+  bestTopic: "",
+  worstTopic: "",
 });
 
-function formatDate(isoString) {
-  if (!isoString) return "";
-  return new Date(isoString).toLocaleDateString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+onMounted(async () => {
+  setTimeout(async () => {
+    const user = auth.currentUser;
+    if (user) {
+      // Busca Tópicos
+      const topics = await getUserTopics(user.uid);
+      processStats(topics);
+    }
+    loading.value = false;
+  }, 500);
+});
+
+function processStats(topics) {
+  if (!topics.length) return;
+
+  const totalTopics = topics.length;
+  // Soma os dados já agregados nos tópicos
+  const totalQuestions = topics.reduce(
+    (acc, t) => acc + (t.totalQuestions || 0),
+    0
+  );
+  const totalCorrect = topics.reduce(
+    (acc, t) => acc + (t.totalCorrect || 0),
+    0
+  );
+
+  const averageScore =
+    totalQuestions > 0 ? Math.round((totalCorrect / totalQuestions) * 100) : 0;
+
+  // Ordena por score para achar melhor/pior
+  const sorted = [...topics].sort((a, b) => b.score - a.score);
+
+  const bestTopic = sorted[0]?.title || "";
+  let worstTopic = sorted[sorted.length - 1]?.title || "";
+
+  if (bestTopic === worstTopic || sorted[sorted.length - 1]?.score >= 80) {
+    worstTopic = "-";
+  }
+
+  stats.value = {
+    totalTopics,
+    totalQuestions,
+    totalCorrect,
+    averageScore,
+    bestTopic,
+    worstTopic,
+  };
 }
 
 function getScoreClass(score) {
-  if (score >= 80) return "high";
-  if (score >= 50) return "medium";
-  return "low";
+  if (score >= 80) return "text-green";
+  if (score >= 60) return "text-yellow";
+  return "text-red";
 }
 </script>
 
 <style scoped>
+/* Reuse os estilos do seu CSS global ou do anterior */
 .page-dark {
-  background-color: #131314;
+  background-color: #050507;
   min-height: 100vh;
-  color: #e3e3e3;
+  color: white;
   padding: 40px 20px;
+  font-family: "Inter", sans-serif;
 }
-
 .container {
-  max-width: 700px;
+  max-width: 900px;
   margin: 0 auto;
 }
-
-header {
+.header {
+  text-align: center;
   margin-bottom: 40px;
+}
+.subtitle {
+  color: #a0a3b5;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 20px;
+}
+.stat-card {
+  background: #111116;
+  padding: 30px;
+  border-radius: 16px;
+  border: 1px solid #2a2d6a;
   text-align: center;
 }
-
-h1 {
-  font-size: 2rem;
-  font-weight: 700;
-  margin-bottom: 8px;
-  background: linear-gradient(90deg, #8ab4f8, #c58af9);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
+.stat-card.highlight {
+  grid-column: 1 / -1;
+  background: linear-gradient(135deg, #111116 0%, #1a1a2e 100%);
+  border-color: #4e73df;
 }
 
-.subtitle {
-  color: #9aa0a6;
+.big-number {
+  font-size: 3.5rem;
+  font-weight: 800;
+  margin: 10px 0;
 }
-
-/* Cards */
-.history-card {
-  background-color: #1e1f20;
-  border: 1px solid #3c4043;
-  border-radius: 12px;
-  padding: 20px;
-  margin-bottom: 16px;
-  transition: transform 0.2s;
-}
-
-.history-card:hover {
-  transform: translateY(-2px);
-  border-color: #5f6368;
-}
-
-.card-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 16px;
-  border-bottom: 1px solid #3c4043;
-  padding-bottom: 12px;
-}
-
-.topic {
-  font-weight: 600;
-  font-size: 1.1rem;
-  color: #e8eaed;
-}
-
-.date {
-  font-size: 0.85rem;
-  color: #9aa0a6;
-}
-
-.card-stats {
-  display: flex;
-  justify-content: space-around;
-}
-
-.stat {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-}
-
-.label {
-  font-size: 0.8rem;
-  color: #9aa0a6;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 4px;
-}
-
-.value {
-  font-size: 1.2rem;
-  font-weight: 700;
-}
-
 .text-green {
-  color: #81c995;
+  color: #10b981;
+}
+.text-yellow {
+  color: #f59e0b;
 }
 .text-red {
-  color: #f28b82;
+  color: #ef4444;
 }
-
-.score.high {
-  color: #81c995;
+.topic-name {
+  font-size: 1.2rem;
+  font-weight: 600;
+  margin: 10px 0;
+  color: #fff;
 }
-.score.medium {
-  color: #fdd663;
+.icon-stat {
+  font-size: 2rem;
+  margin-bottom: 10px;
 }
-.score.low {
-  color: #f28b82;
-}
-
-/* Empty State */
+.loading-state,
 .empty-state {
   text-align: center;
-  margin-top: 50px;
-  color: #9aa0a6;
-}
-
-.btn-start {
-  display: inline-block;
-  margin-top: 20px;
-  background: #8ab4f8;
-  color: #202124;
-  padding: 10px 24px;
-  border-radius: 24px;
-  text-decoration: none;
-  font-weight: 600;
-  transition: background 0.2s;
-}
-
-.btn-start:hover {
-  background: #aecbfa;
-}
-
-/* Spinner */
-.loading {
-  display: flex;
-  justify-content: center;
-  margin-top: 50px;
+  padding: 50px;
+  color: #a0a3b5;
 }
 .spinner {
   width: 40px;
   height: 40px;
-  border: 3px solid #3c4043;
-  border-top-color: #8ab4f8;
+  border: 3px solid #2a2d6a;
+  border-top-color: #4e73df;
   border-radius: 50%;
   animation: spin 1s linear infinite;
+  margin: 0 auto;
 }
 @keyframes spin {
   to {
