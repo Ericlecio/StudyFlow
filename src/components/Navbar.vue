@@ -10,15 +10,41 @@
           to="/home"
           class="nav-item"
           :class="{ active: isActive('/home') }"
-          >Home</router-link
         >
+          Home
+        </router-link>
 
         <router-link
           to="/questions"
           class="nav-item"
           :class="{ active: isActive('/questions') }"
-          >Questões</router-link
         >
+          Questões
+        </router-link>
+
+        <router-link
+          to="/about"
+          class="nav-item"
+          :class="{ active: isActive('/about') }"
+        >
+          Sobre
+        </router-link>
+
+        <router-link
+          to="/history"
+          class="nav-item"
+          :class="{ active: isActive('/history') }"
+        >
+          Histórico
+        </router-link>
+
+        <router-link
+          to="/report"
+          class="nav-item"
+          :class="{ active: isActive('/report') }"
+        >
+          Relatório
+        </router-link>
       </div>
     </div>
 
@@ -67,19 +93,20 @@ const router = useRouter();
 
 onAuthStateChanged(auth, (u) => (user.value = u));
 
-// Lógica para pegar o nome ou parte do email
+
 const displayName = computed(() => {
   if (user.value?.displayName) return user.value.displayName.split(" ")[0];
   if (user.value?.email) return user.value.email.split("@")[0];
   return "Estudante";
 });
 
-// Lógica para pegar a inicial
+
 const userInitial = computed(() => {
   return displayName.value ? displayName.value.charAt(0).toUpperCase() : "U";
 });
 
 function isActive(path) {
+  
   return route.path.startsWith(path);
 }
 
@@ -97,7 +124,7 @@ async function logoutUser() {
   router.push("/login");
 }
 
-// Diretiva click-outside
+
 const vClickOutside = {
   mounted(el, binding) {
     el.clickOutsideEvent = function (event) {
@@ -114,9 +141,9 @@ const vClickOutside = {
 </script>
 
 <style scoped>
-/* Variáveis globais para a Navbar */
+
 .navbar {
-  /* Fundo escuro semi-transparente (Glassmorphism) */
+  
   background: rgba(10, 10, 12, 0.85);
   backdrop-filter: blur(10px);
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
@@ -132,7 +159,7 @@ const vClickOutside = {
   font-family: "Inter", sans-serif;
 }
 
-/* --- Logo --- */
+
 .nav-left {
   display: flex;
   align-items: center;
@@ -153,7 +180,7 @@ const vClickOutside = {
   -webkit-text-fill-color: transparent;
 }
 
-/* --- Links de Navegação --- */
+
 .nav-links {
   display: flex;
   gap: 24px;
@@ -177,7 +204,6 @@ const vClickOutside = {
   color: white;
 }
 
-/* Efeito de brilho embaixo do link ativo */
 .nav-item.active::after {
   content: "";
   position: absolute;
@@ -190,7 +216,7 @@ const vClickOutside = {
   box-shadow: 0 0 10px rgba(78, 115, 223, 0.6);
 }
 
-/* --- Área do Usuário (Dropdown) --- */
+
 .user-dropdown {
   position: relative;
   cursor: pointer;
@@ -248,13 +274,13 @@ const vClickOutside = {
   transform: rotate(180deg);
 }
 
-/* --- Menu Dropdown Flutuante --- */
+
 .dropdown-menu {
   position: absolute;
   top: 120%;
   right: 0;
   width: 200px;
-  background: #171a4a; /* Azul marinho */
+  background: #171a4a; 
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 12px;
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
@@ -300,7 +326,7 @@ const vClickOutside = {
   margin: 6px 0;
 }
 
-/* --- Transição do Menu --- */
+
 .fade-enter-active,
 .fade-leave-active {
   transition: opacity 0.2s ease, transform 0.2s ease;
@@ -312,7 +338,7 @@ const vClickOutside = {
   transform: translateY(-10px);
 }
 
-/* Responsividade Mobile */
+
 @media (max-width: 768px) {
   .nav-links {
     display: none;

@@ -92,6 +92,9 @@ const developers = [
     firstName: "Marcos",
     url: "https://github.com/MoraesMarcos",
   },
+  { name: 'Nielson Junior', 
+    firstName: 'Nielson', 
+    url: 'https://github.com/nielsonj13' },
 ];
 </script>
 
