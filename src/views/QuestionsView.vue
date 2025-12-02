@@ -61,11 +61,11 @@
               :disabled="generatingMore"
               class="action-btn secondary"
             >
-              <span v-if="!generatingMore">🔄 Gerar Mais</span>
+              <span v-if="!generatingMore">Gerar Mais</span>
               <span v-else>Criando...</span>
             </button>
             <button @click="saveAndExit" class="action-btn primary">
-              💾 Salvar Progresso
+              Salvar Progresso
             </button>
           </div>
         </div>
