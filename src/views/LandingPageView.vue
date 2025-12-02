@@ -6,6 +6,9 @@
     <div class="container content-wrapper">
       
       <section class="hero-section">
+        <div class="main-logo-display">
+            Study<span class="brand-highlight">Flow</span>
+        </div>
         <h1 class="hero-title">
           Estude de Forma <span class="brand-highlight">Inteligente</span>.
         </h1>
@@ -57,21 +60,26 @@
         </div>
       </section>
       
-      <section class="screenshot-section">
-          <h2 class="section-title">StudyFlow em Ação 💻</h2>
-          <div class="screenshot-grid">
-              
-              <div class="app-mockup wide placeholder-bg">
-                  <p class="placeholder-text">Dashboard (Placeholder)</p> 
+      <section class="developers-section">
+          <h2 class="section-title">Quem Faz Acontecer 🚀</h2>
+          <div class="team-grid">
+            
+            <div v-for="(dev, index) in developers" :key="index" class="glass-card team-card">
+              <div class="avatar-placeholder">
+                {{ dev.initials }}
               </div>
-              
-              <div class="app-mockup placeholder-bg">
-                  <p class="placeholder-text">Questões (Placeholder)</p>
+              <div class="dev-info">
+                <h3>{{ dev.name }}</h3>
+                <span class="role">Desenvolvedor Full Stack</span>
+                
+                <div class="social-links">
+                  <a :href="dev.github" target="_blank" class="social-btn github">
+                    GitHub
+                  </a>
+                </div>
               </div>
+            </div>
 
-              <div class="app-mockup placeholder-bg">
-                  <p class="placeholder-text">Histórico (Placeholder)</p>
-              </div>
           </div>
       </section>
       
@@ -91,7 +99,18 @@
 
 <script setup>
 </script>
+<script setup>
+import { ref } from 'vue'; 
 
+// Dados dos Desenvolvedores
+const developers = ref([
+  { name: 'Ericlecio Thiago', initials: 'ET', github: 'https://github.com/Ericlecio' },
+  { name: 'Flavio Wallefy', initials: 'FW', github: 'https://github.com/FlavioWallefy1' },
+  { name: 'Lucas Rafael', initials: 'LR', github: 'https://github.com/lucasrafael2601' },
+  { name: 'Marcos Vinicius', initials: 'MV', github: 'https://github.com/MoraesMarcos' },
+  { name: 'Nielson Junior', initials: 'NJ', github: 'https://github.com/nielsonj13' },
+]);
+</script>
 <style scoped>
 
 .landing-page {
@@ -142,17 +161,44 @@
   animation: fadeInUp 1s ease-out;
 }
 
+
+.main-logo-display {
+    font-size: 6.5rem; 
+    font-weight: 900;
+    margin-bottom: 70px; 
+    letter-spacing: -2px;
+    
+    line-height: 1.1; 
+    padding: 5px 0; 
+    
+    color: white; 
+    
+    background: linear-gradient(45deg, #4e73df 30%, #7096ff 70%); 
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    
+    text-shadow: 0 0 5px rgba(255, 255, 255, 0.2); 
+}
+
+@media (max-width: 600px) {
+    .main-logo-display {
+        font-size: 3.5rem; 
+    }
+}
+
 .hero-title {
   font-size: 4rem;
   font-weight: 900;
   line-height: 1.1;
   margin-bottom: 20px;
 }
+
 .brand-highlight {
   background: -webkit-linear-gradient(45deg, #4e73df, #2a2d6a);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
 }
+
 
 .hero-subtitle {
   font-size: 1.4rem;
@@ -256,46 +302,65 @@
 .value-card p { font-size: 1rem; color: var(--text-gray); }
 .icon-emoji { font-size: 1.8rem; }
 
+.developers-section {
+    padding-top: 50px;
+    padding-bottom: 80px;
+}
 
-
-.screenshot-grid {
+.team-grid {
     display: grid;
-    grid-template-columns: 1.5fr 1fr 1fr;
+    grid-template-columns: repeat(3, minmax(250px, 1fr)); 
     gap: 20px;
-    align-items: center;
-    margin-top: 30px;
-    margin-bottom: 100px;
+    margin-top: 40px;
 }
 
-.app-mockup {
-    background: #111116; 
-    border-radius: 16px;
-    padding: 10px;
-    overflow: hidden;
-    border: 1px solid var(--navy-border);
-    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.4);
-    transition: transform 0.3s ease-in-out;
-    min-height: 200px;
+.team-card {
+    /* Reutiliza a classe glass-card */
+    padding: 24px;
     display: flex;
-    justify-content: center;
+    flex-direction: column;
     align-items: center;
-}
-
-.app-mockup.wide {
-    grid-column: 1 / span 1; 
-    grid-row: 1 / span 2; 
-    min-height: 420px; 
-}
-
-.placeholder-bg {
-    background: linear-gradient(135deg, #111116 0%, #1a1a2e 100%);
-}
-.placeholder-text {
-    color: var(--text-gray);
-    font-weight: 500;
     text-align: center;
-    opacity: 0.7;
 }
+
+.avatar-placeholder {
+  width: 80px; height: 80px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #2a2d6a, #171a4a);
+  border: 2px solid rgba(78, 115, 223, 0.3);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.5rem;
+  font-weight: bold;
+  color: #7096ff;
+  margin-bottom: 15px;
+  box-shadow: 0 0 15px var(--brand-glow);
+}
+
+.dev-info h3 { font-size: 1.1rem; margin-bottom: 4px; }
+.role { font-size: 0.85rem; color: #4e73df; font-weight: 500; display: block; margin-bottom: 15px; }
+
+.social-links { display: flex; gap: 10px; justify-content: center; }
+
+.social-btn {
+  padding: 6px 16px;
+  border-radius: 20px;
+  text-decoration: none;
+  font-size: 0.85rem;
+  font-weight: 600;
+  transition: 0.2s;
+}
+
+.social-btn.github {
+  background: rgba(255,255,255,0.1);
+  color: white;
+  border: 1px solid rgba(255,255,255,0.2);
+}
+
+.social-btn.github:hover {
+  background: white;
+  color: black;
+}
+
 
 .final-cta {
     text-align: center;
@@ -310,12 +375,8 @@
 }
 
 @media (max-width: 900px) {
-    .screenshot-grid {
+    .tech-grid, .team-grid {
         grid-template-columns: 1fr;
-    }
-    .app-mockup.wide {
-        grid-column: 1; 
-        grid-row: auto; 
     }
 }
 

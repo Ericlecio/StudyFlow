@@ -20,7 +20,7 @@ const route = useRoute();
 
 // Renomeei para 'showLayout' para ficar claro que controla Navbar E Footer
 const showLayout = computed(() => {
-  return route.path !== "/login" && route.path !== "/register";
+  return route.path !== "/login" && route.path !== "/register" && route.path !== "/";;
 });
 </script>
 
