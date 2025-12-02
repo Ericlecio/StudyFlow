@@ -1,11 +1,22 @@
 <template>
   <div class="page-dark">
-    <div class="container">
+    <div class="container" ref="pdfSection">
       <header class="header">
         <h1>Relatório Geral</h1>
         <p class="subtitle">
           Análise baseada em {{ stats.totalTopics }} tópicos de estudo
         </p>
+        
+        <button 
+          data-html2canvas-ignore="true"
+          v-if="stats.totalTopics > 0" 
+          @click="downloadPDF" 
+          class="btn-download"
+          :disabled="isGenerating"
+        >
+          <span v-if="isGenerating">Gerando PDF...</span>
+          <span v-else>📄 Baixar PDF</span>
+        </button>
       </header>
 
       <div v-if="loading" class="loading-state">
@@ -47,10 +58,14 @@
 <script setup>
 import { ref, onMounted } from "vue";
 import { auth } from "@/firebase";
-// CORREÇÃO: Importa getUserTopics em vez de getUserHistory
 import { getUserTopics } from "@/services/firestoreService";
+import jsPDF from "jspdf";
+import html2canvas from "html2canvas";
 
 const loading = ref(true);
+const isGenerating = ref(false);
+const pdfSection = ref(null);
+
 const stats = ref({
   totalTopics: 0,
   totalQuestions: 0,
@@ -61,12 +76,10 @@ const stats = ref({
 });
 
 onMounted(async () => {
-  // Pequeno delay para garantir que o Auth carregou
   setTimeout(async () => {
     const user = auth.currentUser;
     if (user) {
       try {
-        // Busca a lista de Tópicos
         const topics = await getUserTopics(user.uid);
         processStats(topics);
       } catch (e) {
@@ -81,27 +94,14 @@ function processStats(topics) {
   if (!topics || topics.length === 0) return;
 
   const totalTopics = topics.length;
-  // Soma os dados que já estão agregados nos tópicos
-  const totalQuestions = topics.reduce(
-    (acc, t) => acc + (t.totalQuestions || 0),
-    0
-  );
-  const totalCorrect = topics.reduce(
-    (acc, t) => acc + (t.totalCorrect || 0),
-    0
-  );
+  const totalQuestions = topics.reduce((acc, t) => acc + (t.totalQuestions || 0), 0);
+  const totalCorrect = topics.reduce((acc, t) => acc + (t.totalCorrect || 0), 0);
+  const averageScore = totalQuestions > 0 ? Math.round((totalCorrect / totalQuestions) * 100) : 0;
 
-  // Média ponderada global
-  const averageScore =
-    totalQuestions > 0 ? Math.round((totalCorrect / totalQuestions) * 100) : 0;
-
-  // Ordena por score para achar melhor/pior tópico
   const sorted = [...topics].sort((a, b) => b.score - a.score);
-
   const bestTopic = sorted[0]?.title || "";
   let worstTopic = sorted[sorted.length - 1]?.title || "";
 
-  // Se o melhor for igual ao pior (só tem 1 tópico) ou a nota for alta, não mostra "pior"
   if (bestTopic === worstTopic || sorted[sorted.length - 1]?.score >= 80) {
     worstTopic = "-";
   }
@@ -121,10 +121,44 @@ function getScoreClass(score) {
   if (score >= 60) return "text-yellow";
   return "text-red";
 }
+
+async function downloadPDF() {
+  if (!pdfSection.value) return;
+  
+  isGenerating.value = true;
+  
+  try {
+    const canvas = await html2canvas(pdfSection.value, {
+      scale: 2, // Melhora a resolução
+      backgroundColor: "#050507", // Garante fundo escuro na captura
+      useCORS: true
+    });
+
+    const imgData = canvas.toDataURL("image/png");
+    const pdf = new jsPDF("p", "mm", "a4");
+    
+    // --- NOVO: Pinta o fundo da folha A4 inteira de preto ---
+    // RGB (5, 5, 7) é equivalente ao #050507
+    pdf.setFillColor(5, 5, 7); 
+    pdf.rect(0, 0, pdf.internal.pageSize.getWidth(), pdf.internal.pageSize.getHeight(), "F");
+    // --------------------------------------------------------
+
+    const pdfWidth = pdf.internal.pageSize.getWidth();
+    const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
+    
+    pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
+    pdf.save("StudyFlow-Relatorio.pdf");
+    
+  } catch (error) {
+    console.error("Erro ao gerar PDF:", error);
+    alert("Houve um erro ao gerar o PDF. Tente novamente.");
+  } finally {
+    isGenerating.value = false;
+  }
+}
 </script>
 
 <style scoped>
-/* Reuse os estilos globais ou copie abaixo */
 .page-dark {
   background-color: #050507;
   min-height: 100vh;
@@ -135,6 +169,7 @@ function getScoreClass(score) {
 .container {
   max-width: 900px;
   margin: 0 auto;
+  padding: 20px; 
 }
 .header {
   text-align: center;
@@ -142,6 +177,31 @@ function getScoreClass(score) {
 }
 .subtitle {
   color: #a0a3b5;
+  margin-bottom: 20px;
+}
+
+/* ESTILOS DO BOTÃO DE DOWNLOAD */
+.btn-download {
+  background-color: #4e73df;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+  font-size: 0.9rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.btn-download:hover {
+  background-color: #375abf; /* Corrigido: código Hex válido */
+}
+.btn-download:disabled {
+  background-color: #2a2d6a;
+  cursor: not-allowed;
+  opacity: 0.7;
 }
 
 .dashboard-grid {
@@ -167,15 +227,10 @@ function getScoreClass(score) {
   font-weight: 800;
   margin: 10px 0;
 }
-.text-green {
-  color: #10b981;
-}
-.text-yellow {
-  color: #f59e0b;
-}
-.text-red {
-  color: #ef4444;
-}
+.text-green { color: #10b981; }
+.text-yellow { color: #f59e0b; }
+.text-red { color: #ef4444; }
+
 .topic-name {
   font-size: 1.2rem;
   font-weight: 600;
@@ -202,8 +257,6 @@ function getScoreClass(score) {
   margin: 0 auto;
 }
 @keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
+  to { transform: rotate(360deg); }
 }
 </style>
