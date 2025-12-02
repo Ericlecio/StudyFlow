@@ -216,7 +216,7 @@ onMounted(() => {
 
 async function logout() {
   await signOut(auth);
-  router.push("/login");
+  router.push("/");
 }
 
 function continueStudy(topic) {

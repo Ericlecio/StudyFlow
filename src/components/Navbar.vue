@@ -121,7 +121,7 @@ function closeMenu() {
 async function logoutUser() {
   await logoutService();
   closeMenu();
-  router.push("/login");
+  router.push("/");
 }
 
 
