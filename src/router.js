@@ -2,8 +2,7 @@ import { createRouter, createWebHistory } from "vue-router";
 import { auth } from "@/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 
-// IMPORT DA NOVA VIEW
-import LandingPageView from "@/views/LandingPageView.vue"; // Adicione esta linha
+import LandingPageView from "@/views/LandingPageView.vue";
 import LoginView from "@/views/LoginView.vue";
 import RegisterView from "@/views/RegisterView.vue";
 import HomeView from "@/views/HomeView.vue";
@@ -27,19 +26,16 @@ const getCurrentUser = () => {
 };
 
 const routes = [
-  // 1. NOVA ROTA PÚBLICA (Landing Page)
   { 
     path: "/", 
     name: "landing", 
     component: LandingPageView, 
-    meta: { requiresAuth: false, isPublicRoot: true } // Novo meta para identificar a raiz pública
+    meta: { requiresAuth: false, isPublicRoot: true }
   },
 
-  // 2. ROTAS DE AUTENTICAÇÃO (Públicas)
   { path: "/login", name: "login", component: LoginView, meta: { requiresAuth: false } },
   { path: "/register", name: "register", component: RegisterView, meta: { requiresAuth: false } },
 
-  // 3. ROTAS PROTEGIDAS (requiresAuth: true)
   { path: "/home", name: "home", component: HomeView, meta: { requiresAuth: true } },
   { path: "/questions", name: "questions", component: QuestionsView, meta: { requiresAuth: true } },
   { path: "/history", name: "history", component: HistoryView, meta: { requiresAuth: true } },
@@ -54,26 +50,20 @@ const router = createRouter({
 });
 
 router.beforeEach(async (to, from, next) => {
-  // Simplificamos a verificação de autenticação usando a meta tag 'requiresAuth'
+
   const requiresAuth = to.matched.some(record => record.meta.requiresAuth);
-  
-  // Verifica se a rota atual é a raiz pública (Landing Page)
-  // Adicionei esta meta tag ao path: '/' para facilitar o controle
+
   const isPublicRoot = to.matched.some(record => record.meta.isPublicRoot); 
 
   const user = await getCurrentUser();
 
   if (requiresAuth && !user) {
-    // CASO 1: Tenta acessar rota protegida e está deslogado.
     next("/login");
 
   } else if (!requiresAuth && user && (to.path === '/login' || to.path === '/register' || isPublicRoot)) {
-    // CASO 2: Tenta acessar rota pública (landing/login/register) e está LOGADO.
-    // Redireciona o usuário logado de rotas públicas para /home.
     next("/home");
 
   } else {
-    // CASO 3: Acesso permitido.
     next();
   }
 });

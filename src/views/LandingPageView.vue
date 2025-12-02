@@ -90,15 +90,10 @@
 </template>
 
 <script setup>
-import Navbar from '@/components/Navbar.vue'; 
-import Footer from '@/components/Footer.vue'; 
-// 🚨 LINHAS DE IMPORTAÇÃO DE IMAGEM REMOVIDAS
 </script>
 
 <style scoped>
-/*
- * ESTILOS DE BASE (COPIADOS E ADAPTADOS ANTERIORMENTE)
- */
+
 .landing-page {
   --bg-dark: #050507;
   --brand-color: #4e73df;
@@ -141,7 +136,6 @@ import Footer from '@/components/Footer.vue';
   z-index: 1;
 }
 
-/* 1. HERO SECTION */
 .hero-section {
   text-align: center;
   padding: 80px 0 100px 0;
@@ -213,7 +207,6 @@ import Footer from '@/components/Footer.vue';
   box-shadow: 0 8px 25px rgba(78, 115, 223, 0.5);
 }
 
-/* 2. VANTAGENS / TECH SECTION */
 .section-title {
   text-align: center;
   font-size: 2rem;
@@ -264,7 +257,7 @@ import Footer from '@/components/Footer.vue';
 .icon-emoji { font-size: 1.8rem; }
 
 
-/* 3. PRINTS DO APP */
+
 .screenshot-grid {
     display: grid;
     grid-template-columns: 1.5fr 1fr 1fr;
@@ -282,7 +275,6 @@ import Footer from '@/components/Footer.vue';
     border: 1px solid var(--navy-border);
     box-shadow: 0 10px 20px rgba(0, 0, 0, 0.4);
     transition: transform 0.3s ease-in-out;
-    /* Define uma altura mínima para os placeholders */
     min-height: 200px;
     display: flex;
     justify-content: center;
@@ -292,10 +284,9 @@ import Footer from '@/components/Footer.vue';
 .app-mockup.wide {
     grid-column: 1 / span 1; 
     grid-row: 1 / span 2; 
-    min-height: 420px; /* Maior para o mockup 'wide' */
+    min-height: 420px; 
 }
 
-/* Estilo para placeholders para simular as telas */
 .placeholder-bg {
     background: linear-gradient(135deg, #111116 0%, #1a1a2e 100%);
 }
@@ -306,7 +297,6 @@ import Footer from '@/components/Footer.vue';
     opacity: 0.7;
 }
 
-/* 4. CTA FINAL */
 .final-cta {
     text-align: center;
     padding-bottom: 80px;
@@ -315,7 +305,6 @@ import Footer from '@/components/Footer.vue';
     margin-bottom: 30px;
 }
 
-/* Media Queries (Responsividade) */
 @media (max-width: 1024px) {
     .hero-title { font-size: 3rem; }
 }
