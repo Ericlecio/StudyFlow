@@ -7,7 +7,7 @@
       
       <section class="hero-section">
         <div class="main-logo-display">
-            Study<span class="brand-highlight">Flow</span>
+            StudyFlow
         </div>
         <h1 class="hero-title">
           Estude de Forma <span class="brand-highlight">Inteligente</span>.
@@ -147,6 +147,12 @@ const developers = ref([
   100% { opacity: 0.7; transform: translateX(-50%) scale(1.1); }
 }
 
+@keyframes shineText {
+  to {
+    background-position: 200% center;
+  }
+}
+
 .content-wrapper {
   max-width: 1100px;
   margin: 0 auto;
@@ -161,23 +167,22 @@ const developers = ref([
   animation: fadeInUp 1s ease-out;
 }
 
-
 .main-logo-display {
-    font-size: 6.5rem; 
+    font-size: 5.5rem; 
     font-weight: 900;
-    margin-bottom: 70px; 
+    margin-bottom: 20px; 
     letter-spacing: -2px;
-    
     line-height: 1.1; 
-    padding: 5px 0; 
+    padding: 5px 0;   
     
-    color: white; 
-    
-    background: linear-gradient(45deg, #4e73df 30%, #7096ff 70%); 
+    /* 🚨 EFEITO COPIADO DO .brand-highlight DA HOMEVIEW */
+    background: linear-gradient(135deg, #4e73df 0%, #7096ff 50%, #ffffff 100%);
+    background-size: 200% auto; /* Necessário para a animação */
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-    
-    text-shadow: 0 0 5px rgba(255, 255, 255, 0.2); 
+    animation: shineText 5s linear infinite; /* Animação de brilho em loop */
+
+    text-shadow: none; /* Remove a sombra sutil que havíamos adicionado */
 }
 
 @media (max-width: 600px) {
