@@ -2,6 +2,8 @@ import { createRouter, createWebHistory } from "vue-router";
 import { auth } from "@/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 
+// IMPORT DA NOVA VIEW
+import LandingPageView from "@/views/LandingPageView.vue"; // Adicione esta linha
 import LoginView from "@/views/LoginView.vue";
 import RegisterView from "@/views/RegisterView.vue";
 import HomeView from "@/views/HomeView.vue";
@@ -25,16 +27,25 @@ const getCurrentUser = () => {
 };
 
 const routes = [
-  { path: "/", redirect: "/home" },
-  { path: "/login", name: "login", component: LoginView },
-  { path: "/register", name: "register", component: RegisterView },
+  // 1. NOVA ROTA PÚBLICA (Landing Page)
+  { 
+    path: "/", 
+    name: "landing", 
+    component: LandingPageView, 
+    meta: { requiresAuth: false, isPublicRoot: true } // Novo meta para identificar a raiz pública
+  },
 
-  { path: "/home", name: "home", component: HomeView },
-  { path: "/questions", name: "questions", component: QuestionsView },
-  { path: "/history", name: "history", component: HistoryView },
-  { path: "/report", name: "report", component: ReportView },
-  { path: "/profile", name: "profile", component: ProfileView },
-  { path: "/about", name: "about", component: AboutView,},
+  // 2. ROTAS DE AUTENTICAÇÃO (Públicas)
+  { path: "/login", name: "login", component: LoginView, meta: { requiresAuth: false } },
+  { path: "/register", name: "register", component: RegisterView, meta: { requiresAuth: false } },
+
+  // 3. ROTAS PROTEGIDAS (requiresAuth: true)
+  { path: "/home", name: "home", component: HomeView, meta: { requiresAuth: true } },
+  { path: "/questions", name: "questions", component: QuestionsView, meta: { requiresAuth: true } },
+  { path: "/history", name: "history", component: HistoryView, meta: { requiresAuth: true } },
+  { path: "/report", name: "report", component: ReportView, meta: { requiresAuth: true } },
+  { path: "/profile", name: "profile", component: ProfileView, meta: { requiresAuth: true } },
+  { path: "/about", name: "about", component: AboutView, meta: { requiresAuth: true } },
 ];
 
 const router = createRouter({
@@ -43,21 +54,27 @@ const router = createRouter({
 });
 
 router.beforeEach(async (to, from, next) => {
-  const requiresAuth = to.matched.some(
-    (record) => record.path !== "/login" && record.path !== "/register"
-  );
-
-  if (!requiresAuth) {
-    return next();
-  }
+  // Simplificamos a verificação de autenticação usando a meta tag 'requiresAuth'
+  const requiresAuth = to.matched.some(record => record.meta.requiresAuth);
+  
+  // Verifica se a rota atual é a raiz pública (Landing Page)
+  // Adicionei esta meta tag ao path: '/' para facilitar o controle
+  const isPublicRoot = to.matched.some(record => record.meta.isPublicRoot); 
 
   const user = await getCurrentUser();
 
-  if (user) {
-    next();
-  } else {
-    console.log("Usuário não autenticado, redirecionando para login.");
+  if (requiresAuth && !user) {
+    // CASO 1: Tenta acessar rota protegida e está deslogado.
     next("/login");
+
+  } else if (!requiresAuth && user && (to.path === '/login' || to.path === '/register' || isPublicRoot)) {
+    // CASO 2: Tenta acessar rota pública (landing/login/register) e está LOGADO.
+    // Redireciona o usuário logado de rotas públicas para /home.
+    next("/home");
+
+  } else {
+    // CASO 3: Acesso permitido.
+    next();
   }
 });
 
